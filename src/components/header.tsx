@@ -1,4 +1,4 @@
-import { Infinity } from "lucide-react";
+import { Infinity, UserCog } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,7 @@ export function Header() {
             </span>
           </a>
         </div>
-        <nav className="flex items-center gap-4">
+        <nav className="flex items-center gap-2">
           <Link href="/" passHref>
             <Button variant="ghost">Tableau de Bord</Button>
           </Link>
@@ -24,6 +24,12 @@ export function Header() {
           </Link>
           <Link href="/communaute" passHref>
             <Button variant="ghost">La Communauté</Button>
+          </Link>
+           <Link href="/concierge/dashboard" passHref>
+            <Button variant="outline" className="ml-4">
+              <UserCog className="mr-2" />
+              Espace Concierge
+            </Button>
           </Link>
         </nav>
       </div>
