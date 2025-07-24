@@ -141,10 +141,14 @@ export function PartnerDirectory({ allPartners }: { allPartners: Partner[] }) {
         </div>
       ) : (
          <Card>
-            <CardContent className="p-10">
-                <p className="text-center text-muted-foreground">
-                    Aucun partenaire disponible pour le moment. Veuillez vérifier votre base de données Firestore.
-                </p>
+            <CardContent className="p-10 text-center text-muted-foreground">
+                <p className="font-bold text-lg mb-2">Aucun partenaire à afficher.</p>
+                <p>Veuillez vérifier les points suivants :</p>
+                <ul className="list-disc list-inside text-left mx-auto max-w-md mt-2">
+                    <li>La collection <code className="bg-muted px-1 rounded">partners</code> existe bien dans votre base de données Firestore.</li>
+                    <li>Cette collection contient des documents.</li>
+                    <li>Chaque document a bien les champs <code className="bg-muted px-1 rounded">name</code>, <code className="bg-muted px-1 rounded">servicePillar</code>, et <code className="bg-muted px-1 rounded">description</code>.</li>
+                </ul>
             </CardContent>
          </Card>
       )}

@@ -8,6 +8,7 @@ import { Partner } from '@/types/partner';
 // Cette fonction s'exécute côté serveur pour récupérer les données
 async function getPartners(): Promise<Partner[]> {
   try {
+    console.log("Début de la récupération des partenaires côté serveur...");
     const db = getFirestore(firebaseApp);
     const partnersColRef = collection(db, 'partners');
     const partnerSnapshot = await getDocs(partnersColRef);
