@@ -22,6 +22,9 @@ export function Header() {
           <Link href="/partenaires" passHref>
             <Button variant="ghost">Nos Partenaires</Button>
           </Link>
+          <Link href="/communaute" passHref>
+            <Button variant="ghost">La Communauté</Button>
+          </Link>
         </nav>
       </div>
     </header>
