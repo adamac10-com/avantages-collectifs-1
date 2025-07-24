@@ -76,13 +76,13 @@ export function PartnerDirectory() {
       memberId: "user_jean_dupont",
       memberName: memberData.name,
       partnerName: partnerName,
-      serviceDemande: partnerName, // Assuming service name is the same as partner name for simplicity
       createdAt: new Date(),
       status: "Nouveau",
     };
 
-    // In a real app, this would write to Firestore. Here, we log it.
-    console.log("NOUVELLE DEMANDE DE SERVICE:", newRequest);
+    // This would write to Firestore in a real application.
+    // We are logging it to the console to simulate the database write.
+    console.log("Writing to conciergeRequests:", newRequest);
 
     toast({
       title: "Demande transmise !",
