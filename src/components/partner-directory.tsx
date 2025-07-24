@@ -13,6 +13,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Tag } from "lucide-react";
 import type { Partner } from "@/types/partner";
+import { memberData } from "@/lib/member-data";
+
 
 const partners: Partner[] = [
   {
@@ -69,9 +71,22 @@ export function PartnerDirectory() {
     : partners;
 
   const handleRequestService = (partnerName: string) => {
+     const newRequest = {
+      // In a real app, memberId would come from the auth state
+      memberId: "user_jean_dupont",
+      memberName: memberData.name,
+      partnerName: partnerName,
+      serviceDemande: partnerName, // Assuming service name is the same as partner name for simplicity
+      createdAt: new Date(),
+      status: "Nouveau",
+    };
+
+    // In a real app, this would write to Firestore. Here, we log it.
+    console.log("NOUVELLE DEMANDE DE SERVICE:", newRequest);
+
     toast({
-      title: "Demande transmise",
-      description: `Votre demande pour le service "${partnerName}" va être transmise à votre concierge.`,
+      title: "Demande transmise !",
+      description: `Votre demande pour le service "${partnerName}" a été transmise à votre concierge.`,
     });
   };
 
