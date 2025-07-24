@@ -116,7 +116,7 @@ export function PartnerDirectory({ allPartners }: { allPartners: Partner[] }) {
         ))}
       </div>
 
-      {filteredPartners.length > 0 ? (
+      {filteredPartners && filteredPartners.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredPartners.map((partner) => (
             <Card key={partner.id} className="flex flex-col">
@@ -143,7 +143,7 @@ export function PartnerDirectory({ allPartners }: { allPartners: Partner[] }) {
          <Card>
             <CardContent className="p-10">
                 <p className="text-center text-muted-foreground">
-                    toujours rien
+                    Aucun partenaire disponible pour le moment. Veuillez vérifier votre base de données Firestore.
                 </p>
             </CardContent>
          </Card>
