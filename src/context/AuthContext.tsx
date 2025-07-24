@@ -20,25 +20,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const auth = getAuth(firebaseApp);
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      // Pour la démonstration, nous allons simuler un utilisateur connecté
-      // Dans une vraie application, vous laisseriez la ligne suivante telle quelle.
-      // setUser(user);
-
-      if (user) {
-         setUser(user);
-      } else {
-        // Simuler un utilisateur de test si personne n'est connecté via Firebase Auth
-        const mockUser = {
-            uid: "user_test_12345",
-            displayName: "Jean Dupont (Test)",
-            email: "jean.dupont.test@example.com",
-            // Firebase Auth User objets ont beaucoup plus de propriétés,
-            // mais nous n'avons besoin que de celles-ci pour notre simulation.
-        } as User;
-        setUser(mockUser);
-      }
-
-
+      setUser(user);
       setLoading(false);
     });
 
@@ -68,10 +50,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export const useAuthContext = () => {
+// hook to use the auth context
+export const useAuth = () => {
     const context = useContext(AuthContext);
     if (context === undefined) {
-        throw new Error('useAuthContext must be used within an AuthProvider');
+        throw new Error('useAuth must be used within an AuthProvider');
     }
     return context;
 };

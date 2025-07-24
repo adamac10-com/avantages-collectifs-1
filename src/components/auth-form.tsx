@@ -1,0 +1,175 @@
+
+"use client";
+
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useRouter } from "next/navigation";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { firebaseApp } from "@/lib/firebase";
+
+import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+
+const signUpSchema = z.object({
+  name: z.string().min(2, { message: "Le nom doit contenir au moins 2 caractères." }),
+  email: z.string().email({ message: "Veuillez entrer une adresse e-mail valide." }),
+  password: z.string().min(6, { message: "Le mot de passe doit contenir au moins 6 caractères." }),
+});
+
+const signInSchema = z.object({
+  email: z.string().email({ message: "Veuillez entrer une adresse e-mail valide." }),
+  password: z.string().min(6, { message: "Le mot de passe doit contenir au moins 6 caractères." }),
+});
+
+export function AuthForm() {
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
+  const { toast } = useToast();
+  const auth = getAuth(firebaseApp);
+
+  const form = useForm<z.infer<typeof (isSignUp ? signUpSchema : signInSchema)>>({
+    resolver: zodResolver(isSignUp ? signUpSchema : signInSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+    },
+  });
+
+  const onSubmit = async (values: z.infer<typeof (isSignUp ? signUpSchema : signInSchema)>) => {
+    setIsLoading(true);
+    try {
+      if (isSignUp) {
+        const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
+        await updateProfile(userCredential.user, { displayName: (values as z.infer<typeof signUpSchema>).name });
+        toast({
+          title: "Inscription réussie !",
+          description: "Bienvenue ! Vous allez être redirigé.",
+        });
+      } else {
+        await signInWithEmailAndPassword(auth, values.email, values.password);
+        toast({
+          title: "Connexion réussie !",
+          description: "Ravi de vous revoir. Vous allez être redirigé.",
+        });
+      }
+      router.push("/");
+      router.refresh(); // Force a refresh to update the header
+    } catch (error: any) {
+      const errorCode = error.code;
+      let errorMessage = "Une erreur est survenue.";
+      if (errorCode === "auth/email-already-in-use") {
+        errorMessage = "Cette adresse e-mail est déjà utilisée.";
+      } else if (errorCode === "auth/wrong-password" || errorCode === "auth/user-not-found") {
+        errorMessage = "E-mail ou mot de passe incorrect.";
+      } else if (errorCode === "auth/invalid-email") {
+        errorMessage = "L'adresse e-mail n'est pas valide.";
+      }
+      toast({
+        title: "Erreur",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-3xl font-bold">
+          {isSignUp ? "Créer un compte" : "Se connecter"}
+        </CardTitle>
+        <CardDescription>
+          {isSignUp
+            ? "Rejoignez la communauté pour accéder à tous vos avantages."
+            : "Accédez à votre espace membre."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {isSignUp && (
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nom complet</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Jean Dupont" {...field} disabled={isLoading} style={{ minHeight: "48px" }} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Adresse e-mail</FormLabel>
+                  <FormControl>
+                    <Input placeholder="exemple@domaine.com" {...field} disabled={isLoading} style={{ minHeight: "48px" }}/>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Mot de passe</FormLabel>
+                  <FormControl>
+                    <Input type="password" placeholder="••••••••" {...field} disabled={isLoading} style={{ minHeight: "48px" }}/>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="submit" size="lg" className="w-full min-h-[48px]" disabled={isLoading}>
+              {isLoading ? "Chargement..." : (isSignUp ? "S'inscrire" : "Se connecter")}
+            </Button>
+          </form>
+        </Form>
+        <div className="mt-6 text-center text-sm">
+          {isSignUp ? "Vous avez déjà un compte ?" : "Pas encore de compte ?"}
+          <Button
+            variant="link"
+            className="pl-2"
+            onClick={() => {
+              setIsSignUp(!isSignUp);
+              form.reset();
+            }}
+          >
+            {isSignUp ? "Se connecter" : "S'inscrire"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
