@@ -20,7 +20,7 @@ async function getPartners(): Promise<Partner[]> {
 
     const partnerList = partnerSnapshot.docs.map(doc => {
       const data = doc.data();
-      // On s'assure de retourner un objet Partner bien formé
+      // On s'assure de retourner un objet Partner bien formé et "simple"
       return {
         id: doc.id,
         name: data.name || "Nom manquant",
