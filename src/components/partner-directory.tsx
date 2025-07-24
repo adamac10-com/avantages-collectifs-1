@@ -14,7 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Tag } from "lucide-react";
 import type { Partner } from "@/types/partner";
 import { memberData } from "@/lib/member-data";
-
+import { getFirestore, collection, addDoc } from "firebase/firestore";
+import { firebaseApp } from "@/lib/firebase";
 
 const partners: Partner[] = [
   {
@@ -70,8 +71,8 @@ export function PartnerDirectory() {
     ? partners.filter((p) => p.servicePillar === filter)
     : partners;
 
-  const handleRequestService = (partnerName: string) => {
-     const newRequest = {
+  const handleRequestService = async (partnerName: string) => {
+    const requestData = {
       // In a real app, memberId would come from the auth state
       memberId: "user_jean_dupont",
       memberName: memberData.name,
@@ -80,14 +81,23 @@ export function PartnerDirectory() {
       status: "Nouveau",
     };
 
-    // This would write to Firestore in a real application.
-    // We are logging it to the console to simulate the database write.
-    console.log("Writing to conciergeRequests:", newRequest);
+    try {
+      const db = getFirestore(firebaseApp);
+      const requestsCollectionRef = collection(db, "conciergeRequests");
+      await addDoc(requestsCollectionRef, requestData);
 
-    toast({
-      title: "Demande transmise !",
-      description: `Votre demande pour le service "${partnerName}" a été transmise à votre concierge.`,
-    });
+      toast({
+        title: "Demande transmise !",
+        description: `Votre demande pour le service "${partnerName}" a été transmise à votre concierge.`,
+      });
+    } catch (error) {
+      console.error("Error writing document: ", error);
+      toast({
+        title: "Erreur",
+        description: "Une erreur est survenue lors de la transmission de votre demande.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
