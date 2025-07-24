@@ -143,7 +143,7 @@ export function PartnerDirectory({ allPartners }: { allPartners: Partner[] }) {
          <Card>
             <CardContent className="p-10">
                 <p className="text-center text-muted-foreground">
-                    Aucun partenaire ne correspond à votre filtre.
+                    toujours rien
                 </p>
             </CardContent>
          </Card>
