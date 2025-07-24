@@ -14,8 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Tag } from "lucide-react";
 import type { Partner } from "@/types/partner";
 import { memberData } from "@/lib/member-data";
-import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { firebaseApp } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 const partners: Partner[] = [
   {
@@ -72,24 +72,35 @@ export function PartnerDirectory() {
     : partners;
 
   const handleRequestService = async (partnerName: string) => {
+    // This is a placeholder for the real logged-in user
+    const currentUser = {
+      id: "user123", // Replace with actual authenticated user ID
+      name: memberData.name,
+    };
+
+    const requestData = {
+      memberId: currentUser.id,
+      memberName: currentUser.name,
+      partnerName: partnerName,
+      status: "Nouveau",
+      createdAt: serverTimestamp(),
+    };
+
     try {
-      console.log("Tentative de test d'écriture...");
-      const db = getFirestore();
-      const requestsCollectionRef = collection(db, 'conciergeRequests');
-      await addDoc(requestsCollectionRef, { 
-        testField: "Bonjour le monde",
-        timestamp: new Date() 
-      });
-      console.log("TEST D'ÉCRITURE MINIMAL RÉUSSI ! Le document de test a été créé.");
+      const requestsCollectionRef = collection(db, "conciergeRequests");
+      await addDoc(requestsCollectionRef, requestData);
+
       toast({
-        title: "Test réussi !",
-        description: "Le document de test a été écrit dans Firestore.",
+        title: "Demande transmise !",
+        description:
+          "Votre demande a bien été envoyée. Votre concierge vous recontactera très prochainement.",
       });
     } catch (error) {
-      console.error("ERREUR LORS DU TEST D'ÉCRITURE :", error);
+      console.error("Erreur lors de la création de la demande :", error);
       toast({
-        title: "Erreur de test",
-        description: "L'écriture minimale a échoué. Vérifiez la console.",
+        title: "Erreur",
+        description:
+          "Une erreur est survenue lors de l'envoi de votre demande. Veuillez réessayer.",
         variant: "destructive",
       });
     }
