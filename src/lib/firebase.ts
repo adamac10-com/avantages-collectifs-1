@@ -6,12 +6,12 @@ import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyCe0tjh-M8_mS-TZaGbmgdigMaxeTFlruk",
+  authDomain: "collectif-connect.firebaseapp.com",
+  projectId: "collectif-connect",
+  storageBucket: "collectif-connect.firebasestorage.app",
+  messagingSenderId: "432076267778",
+  appId: "1:432076267778:web:5afbac008cd4acd634a21b"
 };
 
 // Initialize Firebase for client-side usage, and export the app instance for server-side.

@@ -8,7 +8,6 @@ import { Partner } from '@/types/partner';
 // Cette fonction s'exécute côté serveur pour récupérer les données
 async function getPartners(): Promise<Partner[]> {
   try {
-    console.log("Début de la récupération des partenaires côté serveur...");
     const db = getFirestore(firebaseApp);
     const partnersColRef = collection(db, 'partners');
     const partnerSnapshot = await getDocs(partnersColRef);
@@ -26,15 +25,16 @@ async function getPartners(): Promise<Partner[]> {
         name: data.name || "Nom manquant",
         servicePillar: data.servicePillar || "Catégorie manquante",
         description: data.description || "Description manquante",
-      };
+      } as Partner;
     });
     
-    console.log("Données des partenaires récupérées avec succès :", partnerList);
-    return partnerList as Partner[];
+    console.log("Données des partenaires récupérées côté serveur :", partnerList);
+    return partnerList;
 
   } catch (error) {
     console.error("Erreur lors de la récupération des partenaires :", error);
-    return []; // Retourner un tableau vide en cas d'erreur
+    // En cas d'erreur (ex: permissions), on retourne un tableau vide pour ne pas crasher la page.
+    return [];
   }
 }
 
