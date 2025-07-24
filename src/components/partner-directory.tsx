@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tag } from "lucide-react";
 import type { Partner } from "@/types/partner";
 import { memberData } from "@/lib/member-data";
-import { getFirestore, collection, addDoc } from "firebase/firestore";
+import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { firebaseApp } from "@/lib/firebase";
 
 const partners: Partner[] = [
@@ -77,7 +77,7 @@ export function PartnerDirectory() {
       memberId: "user_jean_dupont",
       memberName: memberData.name,
       partnerName: partnerName,
-      createdAt: new Date(),
+      createdAt: serverTimestamp(),
       status: "Nouveau",
     };
 
