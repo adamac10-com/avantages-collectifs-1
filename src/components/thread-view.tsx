@@ -3,6 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AlertTriangle } from "lucide-react";
+import { memberData, setMemberData } from "@/lib/member-data";
 
 // Mock data
 const threadData = {
@@ -68,10 +70,25 @@ export function ThreadView({ threadId }: { threadId: string }) {
   });
 
   function onReplySubmit(values: z.infer<typeof replyFormSchema>) {
-    console.log("New reply:", values.reply); // To be implemented
+    // In a real app, this would submit to Firestore
+    console.log("New reply:", values.reply);
+
+    // Simulate loyalty points logic
+    const pointsAwarded = 10;
+    setMemberData({ loyaltyPoints: memberData.loyaltyPoints + pointsAwarded });
+    
+    // Simulate transaction log
+    console.log("TRANSACTION LOG:", {
+      userId: "current_user_id", // Replace with actual user ID
+      type: "points_earned",
+      points: pointsAwarded,
+      description: "Participation au forum communautaire",
+      timestamp: new Date().toISOString(),
+    });
+
     toast({
       title: "Réponse publiée !",
-      description: "Merci pour votre contribution à la communauté.",
+      description: `Merci pour votre contribution. Vous avez gagné ${pointsAwarded} points de fidélité !`,
     });
     form.reset();
   }

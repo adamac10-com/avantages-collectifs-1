@@ -9,31 +9,32 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Bell, Gift, MessageSquare } from "lucide-react";
-
-// Mock data - replace with actual data from your backend
-const memberData = {
-  name: "Jean Dupont",
-  loyaltyPoints: 1250,
-  notifications: [
-    {
-      id: 1,
-      title: "Nouvelle offre partenaire !",
-      description: "Profitez de -15% sur votre prochain voyage.",
-    },
-    {
-      id: 2,
-      title: "Événement communautaire",
-      description: "Rejoignez notre atelier jardinage le 25 juillet.",
-    },
-  ],
-};
+import { memberData } from "@/lib/member-data";
+import { useState, useEffect } from "react";
 
 export function MemberDashboard() {
+  // Use state to re-render when memberData changes
+  const [currentMemberData, setCurrentMemberData] = useState(memberData);
+
+  useEffect(() => {
+    const updateData = () => {
+      setCurrentMemberData({ ...memberData });
+    };
+
+    // This is a simple event simulation. In a real app, you might use a more robust
+    // state management library or context.
+    window.addEventListener("memberDataUpdate", updateData);
+
+    return () => {
+      window.removeEventListener("memberDataUpdate", updateData);
+    };
+  }, []);
+
   return (
     <div className="space-y-8">
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
-          Bonjour, {memberData.name} !
+          Bonjour, {currentMemberData.name} !
         </h1>
         <p className="text-lg text-muted-foreground">
           Ravis de vous revoir. Voici un aperçu de votre espace membre.
@@ -64,7 +65,7 @@ export function MemberDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-bold text-primary">
-              {memberData.loyaltyPoints.toLocaleString("fr-FR")}
+              {currentMemberData.loyaltyPoints.toLocaleString("fr-FR")}
             </div>
             <p className="pt-2 text-sm text-muted-foreground">
               Continuez à utiliser nos services pour en gagner plus.
@@ -77,7 +78,7 @@ export function MemberDashboard() {
       <div className="space-y-4">
         <h2 className="text-2xl font-bold">Vos notifications</h2>
         <div className="grid gap-4">
-          {memberData.notifications.map((notif) => (
+          {currentMemberData.notifications.map((notif) => (
             <Card key={notif.id}>
               <CardContent className="flex items-start gap-4 p-6">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
@@ -90,7 +91,7 @@ export function MemberDashboard() {
               </CardContent>
             </Card>
           ))}
-          {memberData.notifications.length === 0 && (
+          {currentMemberData.notifications.length === 0 && (
             <Card>
               <CardContent className="p-6">
                 <p className="text-center text-muted-foreground">
