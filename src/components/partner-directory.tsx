@@ -13,9 +13,9 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Tag } from "lucide-react";
 import type { Partner } from "@/types/partner";
-import { memberData } from "@/lib/member-data";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { useAuth } from "@/hooks/useAuth";
 
 const partners: Partner[] = [
   {
@@ -66,43 +66,54 @@ const servicePillars = [
 export function PartnerDirectory() {
   const [filter, setFilter] = useState<string | null>(null);
   const { toast } = useToast();
+  const { user } = useAuth(); // Obtenir l'utilisateur connecté
 
   const filteredPartners = filter
     ? partners.filter((p) => p.servicePillar === filter)
     : partners;
 
-  const handleRequestService = async (partnerName: string) => {
-    // This is a placeholder for the real logged-in user
-    const currentUser = {
-      id: "user123", // Replace with actual authenticated user ID
-      name: memberData.name,
-    };
+  const handleRequestService = async (partner: Partner) => {
+    console.log("ACTION: Début de handleRequestService.");
 
+    // Vérification 1: L'utilisateur est-il connecté ?
+    if (!user) {
+      console.error("ERREUR FATALE: Utilisateur non connecté. Opération annulée.");
+      alert("Erreur : Vous devez être connecté pour faire une demande.");
+      return;
+    }
+
+    // Vérification 2: Les données du partenaire sont-elles valides ?
+    if (!partner || !partner.name) {
+      console.error("ERREUR FATALE: Données du partenaire manquantes ou invalides.", partner);
+      alert("Erreur : Impossible de traiter la demande pour ce partenaire.");
+      return;
+    }
+
+    // Construction de l'objet de données
     const requestData = {
-      memberId: currentUser.id,
-      memberName: currentUser.name,
-      partnerName: partnerName,
+      memberId: user.uid,
+      memberName: user.displayName || "Nom non disponible",
+      partnerName: partner.name,
+      serviceDemande: partner.name,
       status: "Nouveau",
       createdAt: serverTimestamp(),
     };
 
-    try {
-      const requestsCollectionRef = collection(db, "conciergeRequests");
-      await addDoc(requestsCollectionRef, requestData);
+    // Affichage des données exactes qui vont être envoyées
+    console.log("DATA: Données préparées pour l'écriture :", requestData);
 
-      toast({
-        title: "Demande transmise !",
-        description:
-          "Votre demande a bien été envoyée. Votre concierge vous recontactera très prochainement.",
-      });
+    try {
+      const requestsCollectionRef = collection(db, 'conciergeRequests');
+      
+      console.log("SENDING: Envoi des données à Firestore...");
+      await addDoc(requestsCollectionRef, requestData);
+      
+      console.log("SUCCESS: Demande enregistrée avec succès dans Firestore.");
+      alert("Demande transmise avec succès !");
+
     } catch (error) {
-      console.error("Erreur lors de la création de la demande :", error);
-      toast({
-        title: "Erreur",
-        description:
-          "Une erreur est survenue lors de l'envoi de votre demande. Veuillez réessayer.",
-        variant: "destructive",
-      });
+      console.error("FIRESTORE ERROR: Échec de l'écriture dans Firestore.", error);
+      alert("Une erreur est survenue lors de la transmission de votre demande.");
     }
   };
 
@@ -154,7 +165,7 @@ export function PartnerDirectory() {
               <Button
                 className="w-full text-base"
                 style={{ minHeight: "48px" }}
-                onClick={() => handleRequestService(partner.name)}
+                onClick={() => handleRequestService(partner)}
               >
                 Demander ce service via mon concierge
               </Button>
