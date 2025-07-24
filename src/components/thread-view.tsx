@@ -1,9 +1,10 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +59,22 @@ const replyFormSchema = z.object({
     message: "Votre réponse doit contenir au moins 10 caractères.",
   }),
 });
+
+function FormattedDate({ date }: { date: Date }) {
+  const [formattedDate, setFormattedDate] = useState("");
+
+  useEffect(() => {
+    setFormattedDate(
+      new Date(date).toLocaleString("fr-FR", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    );
+  }, [date]);
+
+  return <>{formattedDate}</>;
+}
+
 
 export function ThreadView({ threadId }: { threadId: string }) {
   const { toast } = useToast();
@@ -124,10 +141,7 @@ export function ThreadView({ threadId }: { threadId: string }) {
                     <p className="font-bold text-lg">{post.authorName}</p>
                     <div className="flex items-center gap-4">
                       <p className="text-sm text-muted-foreground">
-                        {new Date(post.createdAt).toLocaleString("fr-FR", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}
+                        <FormattedDate date={post.createdAt} />
                       </p>
                       <Button
                         variant="ghost"
