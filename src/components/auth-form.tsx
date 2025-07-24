@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -29,13 +29,8 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-const signUpSchema = z.object({
-  name: z.string().min(2, { message: "Le nom doit contenir au moins 2 caractères." }),
-  email: z.string().email({ message: "Veuillez entrer une adresse e-mail valide." }),
-  password: z.string().min(6, { message: "Le mot de passe doit contenir au moins 6 caractères." }),
-});
-
-const signInSchema = z.object({
+const authSchema = z.object({
+  name: z.string().optional(),
   email: z.string().email({ message: "Veuillez entrer une adresse e-mail valide." }),
   password: z.string().min(6, { message: "Le mot de passe doit contenir au moins 6 caractères." }),
 });
@@ -47,8 +42,8 @@ export function AuthForm() {
   const { toast } = useToast();
   const auth = getAuth(firebaseApp);
 
-  const form = useForm<z.infer<typeof (isSignUp ? signUpSchema : signInSchema)>>({
-    resolver: zodResolver(isSignUp ? signUpSchema : signInSchema),
+  const form = useForm<z.infer<typeof authSchema>>({
+    resolver: zodResolver(authSchema),
     defaultValues: {
       name: "",
       email: "",
@@ -56,12 +51,17 @@ export function AuthForm() {
     },
   });
 
-  const onSubmit = async (values: z.infer<typeof (isSignUp ? signUpSchema : signInSchema)>) => {
+  const onSubmit = async (values: z.infer<typeof authSchema>) => {
     setIsLoading(true);
     try {
       if (isSignUp) {
+        if (!values.name || values.name.length < 2) {
+            form.setError("name", { type: "manual", message: "Le nom doit contenir au moins 2 caractères."});
+            setIsLoading(false);
+            return;
+        }
         const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
-        await updateProfile(userCredential.user, { displayName: (values as z.infer<typeof signUpSchema>).name });
+        await updateProfile(userCredential.user, { displayName: values.name });
         toast({
           title: "Inscription réussie !",
           description: "Bienvenue ! Vous allez être redirigé.",
@@ -80,7 +80,7 @@ export function AuthForm() {
       let errorMessage = "Une erreur est survenue.";
       if (errorCode === "auth/email-already-in-use") {
         errorMessage = "Cette adresse e-mail est déjà utilisée.";
-      } else if (errorCode === "auth/wrong-password" || errorCode === "auth/user-not-found") {
+      } else if (errorCode === "auth/wrong-password" || errorCode === "auth/user-not-found" || errorCode === "auth/invalid-credential") {
         errorMessage = "E-mail ou mot de passe incorrect.";
       } else if (errorCode === "auth/invalid-email") {
         errorMessage = "L'adresse e-mail n'est pas valide.";
