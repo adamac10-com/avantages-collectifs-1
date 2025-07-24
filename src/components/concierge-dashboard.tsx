@@ -21,9 +21,10 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { setMemberData } from "@/lib/member-data";
+import { firebaseApp } from "@/lib/firebase";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { db } from "@/lib/firebase";
-import { collection, query, onSnapshot, orderBy, doc, updateDoc } from "firebase/firestore";
+import { collection, query, onSnapshot, orderBy } from "firebase/firestore";
 
 // Define the type for a request
 interface ConciergeRequest {
@@ -40,7 +41,10 @@ interface ConciergeRequest {
 
 export function ConciergeDashboard() {
   const [requests, setRequests] = useState<ConciergeRequest[]>([]);
+  const [loadingStates, setLoadingStates] = useState<{[key: string]: boolean}>({});
   const { toast } = useToast();
+  const functions = getFunctions(firebaseApp);
+  const completeServiceRequest = httpsCallable(functions, 'completeServiceRequest');
 
   useEffect(() => {
     const q = query(collection(db, "conciergeRequests"), orderBy("createdAt", "desc"));
@@ -57,48 +61,24 @@ export function ConciergeDashboard() {
     return () => unsubscribe();
   }, []);
 
-
-  const handleValidation = async (requestId: string, memberId: string, memberName: string) => {
-    const pointsToAward = 50;
-
+  const handleValidation = async (requestId: string, memberName: string) => {
+    setLoadingStates(prev => ({...prev, [requestId]: true}));
     try {
-      // 1. Update request status in Firestore
-      const requestRef = doc(db, "conciergeRequests", requestId);
-      await updateDoc(requestRef, {
-        status: "Terminé",
-      });
-    
-      // 2. Award loyalty points (using the mock data updater for now)
-      // In a real app, this would be a server-side transaction.
-      if (memberName === "Jean Dupont") {
-        setMemberData({ loyaltyPoints: 1250 + pointsToAward }); // A fixed value for demo
-      }
-      
-      // 3. Log the transaction (server-side logic in a real app)
-      console.log("TRANSACTION LOG:", {
-        userId: memberId,
-        type: "service_partner",
-        points: pointsToAward,
-        description: `Validation service partenaire`,
-        timestamp: new Date().toISOString(),
-        validatedBy: "concierge_user_id", // Placeholder
-      });
-      
-      // 4. Notify concierge
+      await completeServiceRequest({ requestId });
       toast({
         title: "Service validé !",
-        description: `${pointsToAward} points ont été attribués à ${memberName}.`,
+        description: `Les points de fidélité ont été attribués à ${memberName}.`,
       });
-
-    } catch (error) {
-       console.error("Error validating request: ", error);
-       toast({
+    } catch (error: any) {
+      console.error("Error calling completeServiceRequest function: ", error);
+      toast({
         title: "Erreur",
-        description: "La mise à jour du statut de la demande a échoué.",
+        description: error.message || "Une erreur est survenue lors de la validation.",
         variant: "destructive",
       });
+    } finally {
+        setLoadingStates(prev => ({...prev, [requestId]: false}));
     }
-
   };
 
   const getStatusVariant = (status: string) => {
@@ -148,7 +128,7 @@ export function ConciergeDashboard() {
                 requests.map((request) => (
                   <TableRow key={request.id}>
                     <TableCell className="font-medium">{request.memberName}</TableCell>
-                    <TableCell>{request.serviceName}</TableCell>
+                    <TableCell>{request.serviceName || "Non spécifié"}</TableCell>
                     <TableCell>
                        {new Date(request.createdAt.seconds * 1000).toLocaleDateString("fr-FR")}
                     </TableCell>
@@ -161,11 +141,10 @@ export function ConciergeDashboard() {
                       {request.status !== "Terminé" && (
                         <Button
                           size="sm"
-                          onClick={() =>
-                            handleValidation(request.id, request.memberId, request.memberName)
-                          }
+                          onClick={() => handleValidation(request.id, request.memberName)}
+                          disabled={loadingStates[request.id]}
                         >
-                          Valider et Attribuer les Points
+                          {loadingStates[request.id] ? "Validation..." : "Valider et Attribuer les Points"}
                         </Button>
                       )}
                     </TableCell>
@@ -185,4 +164,3 @@ export function ConciergeDashboard() {
     </div>
   );
 }
-
