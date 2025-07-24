@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -21,76 +22,83 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { setMemberData } from "@/lib/member-data";
+import { db } from "@/lib/firebase";
+import { collection, query, onSnapshot, orderBy, doc, updateDoc } from "firebase/firestore";
 
-// Mock data for concierge requests
-const initialRequests = [
-  {
-    id: "req1",
-    memberName: "Marie Dubois",
-    memberId: "user1",
-    serviceName: "Axa Assurance",
-    status: "Nouveau",
-    createdAt: new Date("2024-07-22T10:00:00Z"),
-  },
-  {
-    id: "req2",
-    memberName: "Pierre Martin",
-    memberId: "user2",
-    serviceName: "Home Services Pro",
-    status: "En cours",
-    createdAt: new Date("2024-07-21T15:30:00Z"),
-  },
-  {
-    id: "req3",
-    memberName: "Sophie Lambert",
-    memberId: "user3",
-    serviceName: "Voyages & Découvertes",
-    status: "Terminé",
-    createdAt: new Date("2024-07-20T09:00:00Z"),
-  },
-];
+// Define the type for a request
+interface ConciergeRequest {
+  id: string;
+  memberName: string;
+  memberId: string;
+  serviceName: string;
+  status: "Nouveau" | "En cours" | "Terminé";
+  createdAt: {
+    seconds: number;
+    nanoseconds: number;
+  };
+}
 
 export function ConciergeDashboard() {
-  const [requests, setRequests] = useState(initialRequests);
+  const [requests, setRequests] = useState<ConciergeRequest[]>([]);
   const { toast } = useToast();
 
-  const handleValidation = (requestId: string, memberId: string, memberName: string) => {
+  useEffect(() => {
+    const q = query(collection(db, "conciergeRequests"), orderBy("createdAt", "desc"));
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const requestsData: ConciergeRequest[] = [];
+      querySnapshot.forEach((doc) => {
+        requestsData.push({ id: doc.id, ...doc.data() } as ConciergeRequest);
+      });
+      setRequests(requestsData);
+    });
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, []);
+
+
+  const handleValidation = async (requestId: string, memberId: string, memberName: string) => {
     const pointsToAward = 50;
 
-    // In a real app, this would call a Cloud Function
-    // Here we simulate the logic client-side
+    try {
+      // 1. Update request status in Firestore
+      const requestRef = doc(db, "conciergeRequests", requestId);
+      await updateDoc(requestRef, {
+        status: "Terminé",
+      });
     
-    // 1. Update request status
-    setRequests((prevRequests) =>
-      prevRequests.map((req) =>
-        req.id === requestId ? { ...req, status: "Terminé" } : req
-      )
-    );
+      // 2. Award loyalty points (using the mock data updater for now)
+      // In a real app, this would be a server-side transaction.
+      if (memberName === "Jean Dupont") {
+        setMemberData({ loyaltyPoints: 1250 + pointsToAward }); // A fixed value for demo
+      }
+      
+      // 3. Log the transaction (server-side logic in a real app)
+      console.log("TRANSACTION LOG:", {
+        userId: memberId,
+        type: "service_partner",
+        points: pointsToAward,
+        description: `Validation service partenaire`,
+        timestamp: new Date().toISOString(),
+        validatedBy: "concierge_user_id", // Placeholder
+      });
+      
+      // 4. Notify concierge
+      toast({
+        title: "Service validé !",
+        description: `${pointsToAward} points ont été attribués à ${memberName}.`,
+      });
 
-    // 2. Award loyalty points (using the mock data updater)
-    // In a real scenario, you'd fetch the user's current points first.
-    // For this simulation, we assume we'd add to their existing total.
-    // The memberData mock only knows about "Jean Dupont", so we'll log for others.
-     if (memberName === "Jean Dupont") {
-      setMemberData({ loyaltyPoints: 1250 + pointsToAward }); // A fixed value for demo
+    } catch (error) {
+       console.error("Error validating request: ", error);
+       toast({
+        title: "Erreur",
+        description: "La mise à jour du statut de la demande a échoué.",
+        variant: "destructive",
+      });
     }
-    
 
-    // 3. Log the transaction
-    console.log("TRANSACTION LOG:", {
-      userId: memberId,
-      type: "service_partner",
-      points: pointsToAward,
-      description: `Validation service partenaire`,
-      timestamp: new Date().toISOString(),
-      validatedBy: "concierge_user_id", // Placeholder
-    });
-    
-    // 4. Notify concierge
-    toast({
-      title: "Service validé !",
-      description: `${pointsToAward} points ont été attribués à ${memberName}.`,
-    });
   };
 
   const getStatusVariant = (status: string) => {
@@ -121,7 +129,7 @@ export function ConciergeDashboard() {
         <CardHeader>
           <CardTitle>Demandes de services</CardTitle>
           <CardDescription>
-            Validez les services pour attribuer les points de fidélité.
+            Validez les services pour attribuer les points de fidélité. Les nouvelles demandes apparaissent automatiquement.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -136,32 +144,40 @@ export function ConciergeDashboard() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {requests.map((request) => (
-                <TableRow key={request.id}>
-                  <TableCell className="font-medium">{request.memberName}</TableCell>
-                  <TableCell>{request.serviceName}</TableCell>
-                  <TableCell>
-                    {new Date(request.createdAt).toLocaleDateString("fr-FR")}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusVariant(request.status)}>
-                      {request.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {request.status !== "Terminé" && (
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          handleValidation(request.id, request.memberId, request.memberName)
-                        }
-                      >
-                        Valider et Attribuer les Points
-                      </Button>
-                    )}
-                  </TableCell>
+              {requests.length > 0 ? (
+                requests.map((request) => (
+                  <TableRow key={request.id}>
+                    <TableCell className="font-medium">{request.memberName}</TableCell>
+                    <TableCell>{request.serviceName}</TableCell>
+                    <TableCell>
+                       {new Date(request.createdAt.seconds * 1000).toLocaleDateString("fr-FR")}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={getStatusVariant(request.status)}>
+                        {request.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {request.status !== "Terminé" && (
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            handleValidation(request.id, request.memberId, request.memberName)
+                          }
+                        >
+                          Valider et Attribuer les Points
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                   <TableCell colSpan={5} className="h-24 text-center">
+                     Aucune demande pour le moment.
+                   </TableCell>
                 </TableRow>
-              ))}
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -169,3 +185,4 @@ export function ConciergeDashboard() {
     </div>
   );
 }
+
