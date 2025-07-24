@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Règle pour la collection des partenaires
+    // Tout le monde peut lire la liste des partenaires.
+    // Seuls les utilisateurs connectés peuvent la modifier (futurs admins).
+    match /partners/{partnerId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Règle pour les demandes des membres
+    // Seul le membre propriétaire de la demande peut la lire ou la modifier.
+    match /conciergeRequests/{requestId} {
+      allow read, write: if request.auth.uid == resource.data.memberId;
+    }
+
+    // Règle pour les données utilisateur
+    // Chaque utilisateur ne peut accéder qu'à son propre document.
+    match /users/{userId} {
+    	allow read, update: if request.auth.uid == userId;
+    }
+    
+    // Règle pour le forum
+    // Tout utilisateur connecté peut lire et écrire sur le forum.
+    match /forum_threads/{threadId}/{document=**} {
+    	allow read, write: if request.auth != null;
+    }
+
+  }
+}
