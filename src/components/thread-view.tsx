@@ -23,7 +23,7 @@ import { AlertTriangle } from "lucide-react";
 import { memberData, setMemberData } from "@/lib/member-data";
 
 // Mock data
-const threadData = {
+const initialThreadData = {
   id: "1",
   title: "Conseils pour l'entretien du jardin en été ?",
   posts: [
@@ -78,6 +78,7 @@ function FormattedDate({ date }: { date: Date }) {
 
 export function ThreadView({ threadId }: { threadId: string }) {
   const { toast } = useToast();
+  const [threadData, setThreadData] = useState(initialThreadData);
 
   const form = useForm<z.infer<typeof replyFormSchema>>({
     resolver: zodResolver(replyFormSchema),
@@ -87,8 +88,19 @@ export function ThreadView({ threadId }: { threadId: string }) {
   });
 
   function onReplySubmit(values: z.infer<typeof replyFormSchema>) {
-    // In a real app, this would submit to Firestore
-    console.log("New reply:", values.reply);
+    const newPost = {
+        id: `post${Date.now()}`,
+        authorName: memberData.name,
+        authorAvatar: "https://placehold.co/100x100.png",
+        createdAt: new Date(),
+        content: values.reply,
+    };
+    
+    // In a real app, this would submit to Firestore and the UI would update via onSnapshot
+    setThreadData(prevData => ({
+        ...prevData,
+        posts: [...prevData.posts, newPost]
+    }));
 
     // Simulate loyalty points logic
     const pointsAwarded = 10;
