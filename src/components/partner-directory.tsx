@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -66,7 +67,7 @@ const servicePillars = [
 export function PartnerDirectory() {
   const [filter, setFilter] = useState<string | null>(null);
   const { toast } = useToast();
-  const { user } = useAuth(); // Obtenir l'utilisateur connecté
+  const { user, loading } = useAuth(); // Obtenir l'utilisateur et l'état de chargement
 
   const filteredPartners = filter
     ? partners.filter((p) => p.servicePillar === filter)
@@ -75,21 +76,23 @@ export function PartnerDirectory() {
   const handleRequestService = async (partner: Partner) => {
     console.log("ACTION: Début de handleRequestService.");
 
-    // Vérification 1: L'utilisateur est-il connecté ?
+    if (loading) {
+      console.log("INFO: Authentification en cours, veuillez patienter.");
+      return;
+    }
+
     if (!user) {
       console.error("ERREUR FATALE: Utilisateur non connecté. Opération annulée.");
       alert("Erreur : Vous devez être connecté pour faire une demande.");
       return;
     }
 
-    // Vérification 2: Les données du partenaire sont-elles valides ?
     if (!partner || !partner.name) {
       console.error("ERREUR FATALE: Données du partenaire manquantes ou invalides.", partner);
       alert("Erreur : Impossible de traiter la demande pour ce partenaire.");
       return;
     }
 
-    // Construction de l'objet de données
     const requestData = {
       memberId: user.uid,
       memberName: user.displayName || "Nom non disponible",
@@ -99,7 +102,6 @@ export function PartnerDirectory() {
       createdAt: serverTimestamp(),
     };
 
-    // Affichage des données exactes qui vont être envoyées
     console.log("DATA: Données préparées pour l'écriture :", requestData);
 
     try {
@@ -109,11 +111,18 @@ export function PartnerDirectory() {
       await addDoc(requestsCollectionRef, requestData);
       
       console.log("SUCCESS: Demande enregistrée avec succès dans Firestore.");
-      alert("Demande transmise avec succès !");
+      toast({
+        title: "Demande transmise !",
+        description: "Votre concierge vous recontactera très prochainement.",
+      });
 
     } catch (error) {
       console.error("FIRESTORE ERROR: Échec de l'écriture dans Firestore.", error);
-      alert("Une erreur est survenue lors de la transmission de votre demande.");
+       toast({
+        variant: "destructive",
+        title: "Erreur de communication",
+        description: "Une erreur est survenue lors de la transmission de votre demande.",
+      });
     }
   };
 
@@ -166,6 +175,7 @@ export function PartnerDirectory() {
                 className="w-full text-base"
                 style={{ minHeight: "48px" }}
                 onClick={() => handleRequestService(partner)}
+                disabled={loading}
               >
                 Demander ce service via mon concierge
               </Button>
