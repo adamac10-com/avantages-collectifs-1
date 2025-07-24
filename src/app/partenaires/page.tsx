@@ -32,6 +32,7 @@ async function getPartners(): Promise<Partner[]> {
 export default async function PartnersPage() {
   // 1. Récupérer les données réelles
   const realPartnersData = await getPartners();
+  console.log("DONNÉES RÉCUPÉRÉES CÔTÉ SERVEUR :", realPartnersData);
 
   // 2. Rendre la page principale
   return (
