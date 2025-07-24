@@ -1,28 +1,21 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Règle pour la collection des partenaires
+    // Allow public read access to the partners collection
     match /partners/{partnerId} {
       allow read: if true;
-      allow write: if request.auth != null;
     }
 
-    // Règle pour les demandes des membres
+    // Allow authenticated users to create and view concierge requests
     match /conciergeRequests/{requestId} {
-      allow create: if request.auth.uid == request.resource.data.memberId;
-      allow read, update: if request.auth.uid == resource.data.memberId;
+      allow read, create: if request.auth != null;
     }
 
-    // Règle pour les données utilisateur
-    match /users/{userId} {
-      allow read, update: if request.auth.uid == userId;
+    // Default to locked down for any other collection
+    match /{document=**} {
+      allow read, write: if false;
     }
-
-    // Règle pour le forum
-    match /forum_threads/{threadId}/{document=**} {
-      allow read, write: if request.auth != null;
-    }
-
   }
 }
