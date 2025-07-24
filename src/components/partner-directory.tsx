@@ -72,29 +72,24 @@ export function PartnerDirectory() {
     : partners;
 
   const handleRequestService = async (partnerName: string) => {
-    const requestData = {
-      // In a real app, memberId would come from the auth state
-      memberId: "user_jean_dupont",
-      memberName: memberData.name,
-      partnerName: partnerName,
-      createdAt: serverTimestamp(),
-      status: "Nouveau",
-    };
-
     try {
-      const db = getFirestore(firebaseApp);
-      const requestsCollectionRef = collection(db, "conciergeRequests");
-      await addDoc(requestsCollectionRef, requestData);
-
+      console.log("Tentative de test d'écriture...");
+      const db = getFirestore();
+      const requestsCollectionRef = collection(db, 'conciergeRequests');
+      await addDoc(requestsCollectionRef, { 
+        testField: "Bonjour le monde",
+        timestamp: new Date() 
+      });
+      console.log("TEST D'ÉCRITURE MINIMAL RÉUSSI ! Le document de test a été créé.");
       toast({
-        title: "Demande transmise !",
-        description: `Votre demande pour le service "${partnerName}" a été transmise à votre concierge.`,
+        title: "Test réussi !",
+        description: "Le document de test a été écrit dans Firestore.",
       });
     } catch (error) {
-      console.error("Error writing document: ", error);
+      console.error("ERREUR LORS DU TEST D'ÉCRITURE :", error);
       toast({
-        title: "Erreur",
-        description: "Une erreur est survenue lors de la transmission de votre demande.",
+        title: "Erreur de test",
+        description: "L'écriture minimale a échoué. Vérifiez la console.",
         variant: "destructive",
       });
     }
