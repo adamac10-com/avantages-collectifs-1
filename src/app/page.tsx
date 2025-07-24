@@ -1,9 +1,9 @@
-import { SmartConciergeAssistant } from "@/components/smart-concierge-assistant";
+import { MemberDashboard } from "@/components/member-dashboard";
 
-export default function ConciergePage() {
+export default function DashboardPage() {
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8 md:py-12">
-      <SmartConciergeAssistant />
+      <MemberDashboard />
     </div>
   );
 }

@@ -8,7 +8,7 @@ export function Header() {
           <a href="/" className="flex items-center space-x-3">
             <Infinity className="h-10 w-10 text-primary" />
             <span className="inline-block text-xl font-bold">
-              Collectif Connect
+              Avantages Collectifs
             </span>
           </a>
         </div>

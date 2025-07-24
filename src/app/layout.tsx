@@ -5,7 +5,7 @@ import { Header } from "@/components/header";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
-  title: "Collectif Connect",
+  title: "Avantages Collectifs",
   description:
     "Votre compagnon numérique pour la communauté Avantages Collectifs.",
 };
