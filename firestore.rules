@@ -2,46 +2,35 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Règle générale : Interdire toutes les lectures/écritures par défaut
-    match /{document=**} {
-      allow read, write: if false;
-    }
 
-    // Règle pour les profils utilisateurs
-    // Les utilisateurs peuvent lire et écrire sur leur propre document
-    // Les utilisateurs peuvent créer leur document lors de l'inscription
+    // Les utilisateurs peuvent lire leurs propres données et les concierges peuvent lire toutes les données utilisateur (pourrait être affiné)
     match /users/{userId} {
-      allow read, update: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null;
+      allow read: if request.auth != null; // On pourrait restreindre à "if request.auth.uid == userId;" pour plus de sécurité
+      allow write: if request.auth.uid == userId;
     }
 
-    // Règle pour les demandes au concierge
-    // Les utilisateurs authentifiés peuvent créer des demandes
-    // Seuls les utilisateurs authentifiés peuvent lire (devrait être affiné pour n'autoriser que les concierges et l'utilisateur concerné)
+    // Les concierges peuvent lire toutes les demandes
+    // Les membres peuvent créer des demandes
     match /conciergeRequests/{requestId} {
-      allow create: if request.auth != null;
-      allow read: if request.auth != null; // À affiner plus tard
-      allow update: if request.auth != null; // À affiner pour autoriser uniquement les concierges
+       allow read: if request.auth != null; // Idéalement, restreindre aux concierges et au membre concerné
+       allow create: if request.auth != null;
+       allow update: if request.auth != null; // Idéalement, restreindre aux concierges
     }
 
-    // Règle pour l'historique des transactions
-    // Seul l'utilisateur concerné peut lire ses transactions
+    // Les utilisateurs ne peuvent lire que leurs propres transactions
     match /transactions/{transactionId} {
-      allow read: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      // Personne ne peut créer/modifier les transactions directement, cela se fait via les Cloud Functions
-      allow create, update, delete: if false;
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null; // Normalement géré par les fonctions backend
     }
-    
-    // Règle pour la collection des récompenses
+
     // Tout utilisateur connecté peut lire la liste des récompenses.
     match /rewards/{rewardId} {
       allow read: if request.auth != null;
     }
 
-    // Règle pour les partenaires
-    // Tout le monde (même non authentifié) peut lire la liste des partenaires
+    // Les partenaires peuvent être lus par n'importe qui (ou seulement les utilisateurs connectés)
     match /partners/{partnerId} {
-        allow read: if true;
+      allow read: if true; // Ou "if request.auth != null;" si réservé aux membres
     }
   }
 }
