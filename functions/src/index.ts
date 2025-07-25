@@ -1,4 +1,6 @@
+
 import {onCall, HttpsError} from "firebase-functions/v2/https";
+import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 
@@ -162,5 +164,30 @@ export const redeemReward = onCall(async (request) => {
       throw error;
     }
     throw new HttpsError("internal", "Une erreur interne est survenue lors de l'échange.");
+  }
+});
+
+// Créer un document utilisateur dans Firestore lors de la création d'un nouveau compte
+export const createUserProfile = functions.auth.user().onCreate(async (user) => {
+  logger.info(`Création du profil pour le nouvel utilisateur: ${user.uid}`, {
+    email: user.email,
+    name: user.displayName,
+  });
+
+  const userProfile = {
+    email: user.email,
+    displayName: user.displayName || "Nouveau Membre",
+    membershipLevel: "essentiel",
+    loyaltyPoints: 0,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  try {
+    await db.collection("users").doc(user.uid).set(userProfile);
+    logger.info(`Profil pour ${user.uid} créé avec succès.`);
+    return null;
+  } catch (error) {
+    logger.error(`Erreur lors de la création du profil pour ${user.uid}:`, error);
+    return null;
   }
 });
