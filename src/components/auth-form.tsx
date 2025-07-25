@@ -8,6 +8,7 @@ import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { firebaseApp } from "@/lib/firebase";
+import Image from "next/image";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -97,7 +98,15 @@ export function AuthForm() {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="items-center">
+        <Image 
+          src="/logo.png"
+          alt="Logo Avantages Collectifs"
+          width={180}
+          height={45}
+          className="mb-6"
+          priority
+        />
         <CardTitle className="text-3xl font-bold">
           {isSignUp ? "Créer un compte" : "Se connecter"}
         </CardTitle>
