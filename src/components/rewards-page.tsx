@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { db } from "@/lib/firebase";
-import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where, orderBy, Timestamp, getDocs } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,9 +25,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Gift, Coins } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface UserData {
   loyaltyPoints: number;
+  membershipLevel: 'essentiel' | 'privilege';
 }
 
 interface Transaction {
@@ -37,33 +39,19 @@ interface Transaction {
   timestamp: Timestamp;
 }
 
-const rewards = [
-    {
-      id: "reward1",
-      title: "Chèque-cadeau de 10€",
-      cost: 1000,
-    },
-    {
-      id: "reward2",
-      title: "Service de jardinage (1h)",
-      cost: 2500,
-    },
-    {
-      id: "reward3",
-      title: "Consultation Rénovation",
-      cost: 1500,
-    },
-     {
-      id: "reward4",
-      title: "Billet de Cinéma",
-      cost: 750,
-    },
-];
+interface Reward {
+    id: string;
+    title: string;
+    pointsCost: number;
+    requiredLevel: 'essentiel' | 'privilege';
+}
 
 export function RewardsPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -74,13 +62,20 @@ export function RewardsPage() {
 
     setLoading(true);
 
+    // Fetch User Data
     const userDocRef = doc(db, "users", user.uid);
     const userUnsubscribe = onSnapshot(userDocRef, (doc) => {
       if (doc.exists()) {
-        setUserData(doc.data() as UserData);
+        // Set default membershipLevel if not present
+        const data = doc.data();
+        setUserData({
+            loyaltyPoints: data.loyaltyPoints || 0,
+            membershipLevel: data.membershipLevel || 'essentiel'
+        });
       }
     });
 
+    // Fetch Transactions
     const transactionsQuery = query(
       collection(db, "transactions"),
       where("userId", "==", user.uid),
@@ -95,11 +90,48 @@ export function RewardsPage() {
       setLoading(false);
     });
 
+    // Fetch Rewards
+    const fetchRewards = async () => {
+        try {
+            const rewardsCol = collection(db, "rewards");
+            const rewardsSnapshot = await getDocs(rewardsCol);
+            const rewardsList = rewardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Reward));
+            setRewards(rewardsList);
+        } catch (error) {
+            console.error("Error fetching rewards:", error);
+            toast({
+                title: "Erreur",
+                description: "Impossible de charger le catalogue des récompenses.",
+                variant: "destructive"
+            });
+        }
+    }
+
+    fetchRewards();
+
+
     return () => {
       userUnsubscribe();
       transactionsUnsubscribe();
     };
-  }, [user]);
+  }, [user, toast]);
+
+  const handleExchange = (reward: Reward) => {
+      // This is where the logic to exchange points would go.
+      // For now, it just shows a toast.
+      toast({
+          title: "Échange en cours...",
+          description: `Vous avez demandé à échanger ${reward.pointsCost} points contre "${reward.title}".`
+      })
+  }
+
+  const filteredRewards = userData ? rewards.filter(reward => {
+      if (userData.membershipLevel === 'privilege') {
+          return true; // Privilège members see all rewards
+      }
+      return reward.requiredLevel === 'essentiel'; // Essentiel members see only essentiel rewards
+  }) : [];
+
 
   if (loading) {
     return (
@@ -139,6 +171,9 @@ export function RewardsPage() {
              <Gift className="h-8 w-8" />
              <span>Votre Solde Actuel</span>
           </CardTitle>
+           <CardDescription className="text-primary-foreground/80 pt-1">
+            Niveau d'adhésion : <span className="font-bold capitalize">{userData?.membershipLevel}</span>
+          </CardDescription>
         </CardHeader>
         <CardContent>
             <p className="text-6xl font-bold">
@@ -191,25 +226,39 @@ export function RewardsPage() {
       <div className="space-y-4">
         <h2 className="text-2xl font-bold">Échanger mes points</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {rewards.map(reward => (
+            {filteredRewards.map(reward => (
                 <Card key={reward.id} className="flex flex-col">
                     <CardHeader>
                         <CardTitle>{reward.title}</CardTitle>
                         <CardDescription className="flex items-center gap-2 pt-2 font-semibold text-accent text-lg">
                            <Coins />
-                           {reward.cost.toLocaleString("fr-FR")} points
+                           {reward.pointsCost.toLocaleString("fr-FR")} points
                         </CardDescription>
+                         {reward.requiredLevel === 'privilege' && (
+                          <Badge variant="outline" className="mt-2 w-fit border-accent text-accent">Exclusivité Privilège</Badge>
+                        )}
                     </CardHeader>
                     <CardContent className="flex-grow">
                         {/* Placeholder for reward description */}
                     </CardContent>
                     <CardFooter>
-                         <Button className="w-full min-h-[48px]" disabled>
+                         <Button 
+                            className="w-full min-h-[48px]"
+                            disabled={!userData || userData.loyaltyPoints < reward.pointsCost}
+                            onClick={() => handleExchange(reward)}
+                         >
                             Échanger
                          </Button>
                     </CardFooter>
                 </Card>
             ))}
+             {filteredRewards.length === 0 && !loading && (
+                <Card className="md:col-span-3">
+                    <CardContent className="p-10 text-center text-muted-foreground">
+                        <p>Aucune récompense disponible pour votre niveau d'adhésion pour le moment.</p>
+                    </CardContent>
+                </Card>
+            )}
         </div>
       </div>
     </div>
