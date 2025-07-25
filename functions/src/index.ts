@@ -23,7 +23,6 @@ export const completeServiceRequest = onCall(async (request) => {
   }
 
   // 2. Vérification que l'utilisateur a le rôle de "Concierge" (sécurité)
-  // eslint-disable-next-line max-len
   // Note : Cette partie suppose que vous avez un champ 'role' sur l'utilisateur.
   // Nous la laissons en commentaire pour l'instant pour ne pas bloquer.
   // const userRole = request.auth.token.role;
@@ -46,9 +45,7 @@ export const completeServiceRequest = onCall(async (request) => {
 
   try {
     const requestRef = db.collection("conciergeRequests").doc(requestId);
-    // eslint-disable-next-line max-len
-    const userRef = db.collection("users").doc(request.auth.uid); // Ceci est l'ID du concierge
-    // eslint-disable-next-line max-len
+    
     // Utilisation d'une transaction pour garantir que toutes les opérations réussissent ou échouent ensemble
     await db.runTransaction(async (transaction) => {
       const requestDoc = await transaction.get(requestRef);
@@ -56,19 +53,24 @@ export const completeServiceRequest = onCall(async (request) => {
         throw new HttpsError("not-found", "La demande n'a pas été trouvée.");
       }
 
-      const memberId = requestDoc.data()?.memberId;
+      const requestData = requestDoc.data();
+      if (!requestData || requestData.status === "Terminé") {
+          logger.warn(`La demande ${requestId} est déjà terminée ou les données sont invalides.`);
+          return;
+      }
+
+      const memberId = requestData.memberId;
       if (!memberId) {
-        // eslint-disable-next-line max-len
         throw new HttpsError("internal", "L'ID du membre est manquant dans la demande.");
       }
       const memberRef = db.collection("users").doc(memberId);
 
-      // eslint-disable-next-line max-len
       // Mettre à jour la demande, les points du membre, et créer une transaction
-      transaction.update(requestRef, {status: "Terminé", validatedBy: userRef});
+      transaction.update(requestRef, {status: "Terminé", validatedBy: request.auth.uid});
       transaction.update(memberRef, {
         loyaltyPoints: admin.firestore.FieldValue.increment(50),
       });
+      
       const transactionRef = db.collection("transactions").doc();
       transaction.set(transactionRef, {
         userId: memberId,
@@ -82,7 +84,6 @@ export const completeServiceRequest = onCall(async (request) => {
     return {success: true, message: "La demande a été validée avec succès."};
   } catch (error) {
     logger.error("Erreur lors de la validation de la demande :", error);
-    // eslint-disable-next-line max-len
     // Renvoyer l'erreur originale si c'est une HttpsError, sinon une erreur interne
     if (error instanceof HttpsError) {
       throw error;
