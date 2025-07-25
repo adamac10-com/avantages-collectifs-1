@@ -43,35 +43,35 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-brand-green text-white border-b-2 border-brand-gold">
+    <header className="sticky top-0 z-40 w-full border-b-2 border-brand-gold bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-20 max-w-6xl items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center">
             <Image
               src="/logo.png"
               alt="Logo Avantages Collectifs"
-              width={160} // Taille réduite
-              height={40} // Taille réduite
+              width={160} 
+              height={40}
               priority
             />
           </Link>
         </div>
         <nav className="flex items-center gap-2">
           {loading ? (
-            <Skeleton className="h-10 w-24 bg-white/20" />
+            <Skeleton className="h-10 w-24" />
           ) : user ? (
             <>
               <Link href="/" passHref>
-                <Button variant="ghost" className="text-white hover:bg-white/20 hover:text-white">Tableau de Bord</Button>
+                <Button variant="ghost">Tableau de Bord</Button>
               </Link>
               <Link href="/partenaires" passHref>
-                <Button variant="ghost" className="text-white hover:bg-white/20 hover:text-white">Nos Partenaires</Button>
+                <Button variant="ghost">Nos Partenaires</Button>
               </Link>
               <Link href="/communaute" passHref>
-                <Button variant="ghost" className="text-white hover:bg-white/20 hover:text-white">La Communauté</Button>
+                <Button variant="ghost">La Communauté</Button>
               </Link>
               <Link href="/concierge/dashboard" passHref>
-                <Button variant="outline" className="ml-4 border-white text-white hover:bg-white hover:text-brand-green">
+                <Button variant="outline" className="ml-4">
                   <UserCog className="mr-2" />
                   Espace Concierge
                 </Button>
@@ -80,7 +80,7 @@ export function Header() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-10 w-10 rounded-full ml-4">
-                    <Avatar className="h-10 w-10 border-2 border-white/80">
+                    <Avatar className="h-10 w-10">
                       <AvatarImage src={user.photoURL ?? ''} alt={user.displayName ?? 'Utilisateur'} />
                       <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
                     </Avatar>
@@ -110,7 +110,7 @@ export function Header() {
             </>
           ) : (
             <Link href="/connexion" passHref>
-              <Button className="bg-white text-brand-green hover:bg-gray-200">
+              <Button>
                 <LogIn className="mr-2" />
                 Connexion / Inscription
               </Button>
