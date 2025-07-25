@@ -1,25 +1,36 @@
 
+"use client";
+
 import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Header } from "@/components/header";
 import { cn } from "@/lib/utils";
 import { AuthProvider } from "@/context/AuthContext";
+import { usePathname } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Avantages Collectifs",
-  description:
-    "Votre compagnon numérique pour la communauté Avantages Collectifs.",
-};
+// export const metadata: Metadata = {
+//   title: "Avantages Collectifs",
+//   description:
+//     "Votre compagnon numérique pour la communauté Avantages Collectifs.",
+// };
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const pathname = usePathname();
+  const showHeader = pathname !== "/connexion";
+
   return (
     <html lang="fr" className="scroll-smooth">
       <head>
+        <title>Avantages Collectifs</title>
+        <meta
+          name="description"
+          content="Votre compagnon numérique pour la communauté Avantages Collectifs."
+        />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
@@ -38,7 +49,7 @@ export default function RootLayout({
       >
         <AuthProvider>
           <div className="relative flex min-h-dvh flex-col">
-            <Header />
+            {showHeader && <Header />}
             <main className="flex-1">{children}</main>
           </div>
           <Toaster />
