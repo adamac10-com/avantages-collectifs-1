@@ -1,3 +1,4 @@
+
 "use client";
 
 import Image from 'next/image';
@@ -6,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { getAuth, signOut } from 'firebase/auth';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from "./ui/button";
-import { UserCog, LogOut, LogIn, Gift } from "lucide-react";
+import { UserCog, LogOut, LogIn, Gift, Handshake } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,10 +28,6 @@ export function Header() {
     await signOut(auth);
     router.push("/connexion");
     router.refresh();
-  };
-
-  const handleNavigateToRewards = () => {
-    router.push('/recompenses');
   };
 
   const getInitials = (name: string | null | undefined) => {
@@ -70,12 +67,25 @@ export function Header() {
               <Link href="/communaute" passHref>
                 <Button variant="ghost">La Communauté</Button>
               </Link>
-              <Link href="/concierge/dashboard" passHref>
-                <Button variant="outline" className="ml-4">
-                  <UserCog className="mr-2" />
-                  Espace Concierge
-                </Button>
-              </Link>
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                   <Button variant="outline" className="ml-4">
+                    <UserCog className="mr-2" />
+                    Espace Concierge
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => router.push('/concierge/dashboard')}>
+                    <UserCog className="mr-2" />
+                    <span>Tableau de bord</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push('/concierge/partenaires')}>
+                    <Handshake className="mr-2" />
+                    <span>Gérer les partenaires</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -96,7 +106,7 @@ export function Header() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleNavigateToRewards}>
+                  <DropdownMenuItem onClick={() => router.push('/recompenses')}>
                     <Gift className="mr-2" />
                     <span>Mes récompenses</span>
                   </DropdownMenuItem>
