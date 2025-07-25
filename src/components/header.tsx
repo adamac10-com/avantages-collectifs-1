@@ -44,7 +44,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-[#3A6A3A] text-white border-b-2 border-[#D4A03C] backdrop-blur supports-[backdrop-filter]:bg-[#3A6A3A]/60">
+    <header className="sticky top-0 z-40 w-full bg-brand-green text-white border-b-2 border-brand-gold backdrop-blur supports-[backdrop-filter]:bg-brand-green/60">
       <div className="container mx-auto flex h-20 max-w-6xl items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center">
@@ -72,7 +72,7 @@ export function Header() {
                 <Button variant="ghost" className="text-white hover:bg-white/20 hover:text-white">La Communauté</Button>
               </Link>
               <Link href="/concierge/dashboard" passHref>
-                <Button variant="outline" className="ml-4 border-white text-white hover:bg-white hover:text-[#3A6A3A]">
+                <Button variant="outline" className="ml-4 border-white text-white hover:bg-white hover:text-brand-green">
                   <UserCog className="mr-2" />
                   Espace Concierge
                 </Button>
@@ -111,7 +111,7 @@ export function Header() {
             </>
           ) : (
             <Link href="/connexion" passHref>
-              <Button className="bg-white text-[#3A6A3A] hover:bg-gray-200">
+              <Button className="bg-white text-brand-green hover:bg-gray-200">
                 <LogIn className="mr-2" />
                 Connexion / Inscription
               </Button>
