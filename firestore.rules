@@ -1,37 +1,39 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow public read access to partners
-    match /partners/{partnerId} {
-      allow read: if true;
-    }
-    match /partners/{path=**} {
-      allow read: if true;
-    }
-
-    // Allow users to read their own user document, and concierges to update points
+    // Les utilisateurs peuvent lire et mettre à jour leur propre document
     match /users/{userId} {
-      allow read: if request.auth.uid == userId;
-      // This rule is for the backend function, which has admin rights,
-      // but as a good practice, we can define it.
-      allow update: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'concierge';
+      allow read, update: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Allow authenticated users to create concierge requests
-    // Allow any authenticated user to read all requests (for concierge dashboard)
+    // Les utilisateurs connectés peuvent créer des demandes de concierge
     match /conciergeRequests/{requestId} {
-      allow read, create: if request.auth != null;
-       // Allow update only for the backend function (which bypasses rules) or a concierge role
-      allow update: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'concierge';
+      allow create: if request.auth != null;
+      // Seul un utilisateur avec un rôle de concierge (à implémenter) pourrait lire/mettre à jour toutes les demandes
+      // Pour l'instant, on se base sur l'authentification simple
+      allow read, update, delete: if request.auth != null;
     }
-    
-    // Allow users to query their own transactions.
-    // This requires a rule on the collection itself.
-    match /transactions/{transaction} {
-      allow read: if request.auth.uid == resource.data.userId;
-      allow list: if request.auth.uid == request.query.where.userId;
+
+    // Les utilisateurs connectés peuvent lire la liste des partenaires
+    match /partners/{partnerId} {
+      allow read: if request.auth != null;
+    }
+
+    // Les utilisateurs connectés peuvent lire et écrire dans la communauté
+    match /forumThreads/{threadId}/{document=**} {
+       allow read, write: if request.auth != null;
+    }
+
+    // Les utilisateurs peuvent lire leur propre historique de transactions
+    match /transactions/{transactionId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+
+    // Règle pour la collection des récompenses
+    // Tout utilisateur connecté peut lire la liste des récompenses.
+    match /rewards/{rewardId} {
+      allow read: if request.auth != null;
     }
   }
 }
