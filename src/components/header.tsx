@@ -1,13 +1,13 @@
 
 "use client";
 
-import { Infinity, UserCog, LogOut, LogIn, Gift } from "lucide-react";
 import Image from 'next/image';
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { getAuth, signOut } from "firebase/auth";
-import { useAuth } from "@/hooks/useAuth";
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { getAuth, signOut } from 'firebase/auth';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from "./ui/button";
+import { UserCog, LogOut, LogIn, Gift } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,7 +19,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "./ui/skeleton";
 
-
 export function Header() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -30,10 +29,10 @@ export function Header() {
     router.push("/connexion");
     router.refresh();
   };
-  
+
   const handleNavigateToRewards = () => {
     router.push('/recompenses');
-  }
+  };
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return "AC";
@@ -42,33 +41,38 @@ export function Header() {
       return `${names[0][0]}${names[1][0]}`.toUpperCase();
     }
     return name.substring(0, 2).toUpperCase();
-  }
+  };
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#3A6A3A] text-white border-b-2 border-[#D4A03C] backdrop-blur supports-[backdrop-filter]:bg-[#3A6A3A]/60">
       <div className="container mx-auto flex h-20 max-w-6xl items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center">
-            {/* Ligne de test avec une balise img standard */}
-            <img src="/logo.png" alt="Logo Avantages Collectifs" style={{ width: "200px", height: "auto" }} />
+            <Image
+              src="/logo.png"
+              alt="Logo Avantages Collectifs"
+              width={160} // Taille réduite
+              height={40} // Taille réduite
+              priority
+            />
           </Link>
         </div>
         <nav className="flex items-center gap-2">
           {loading ? (
-             <Skeleton className="h-10 w-24" />
+            <Skeleton className="h-10 w-24 bg-white/20" />
           ) : user ? (
             <>
               <Link href="/" passHref>
-                <Button variant="ghost">Tableau de Bord</Button>
+                <Button variant="ghost" className="text-white hover:bg-white/20 hover:text-white">Tableau de Bord</Button>
               </Link>
               <Link href="/partenaires" passHref>
-                <Button variant="ghost">Nos Partenaires</Button>
+                <Button variant="ghost" className="text-white hover:bg-white/20 hover:text-white">Nos Partenaires</Button>
               </Link>
               <Link href="/communaute" passHref>
-                <Button variant="ghost">La Communauté</Button>
+                <Button variant="ghost" className="text-white hover:bg-white/20 hover:text-white">La Communauté</Button>
               </Link>
               <Link href="/concierge/dashboard" passHref>
-                <Button variant="outline" className="ml-4">
+                <Button variant="outline" className="ml-4 border-white text-white hover:bg-white hover:text-[#3A6A3A]">
                   <UserCog className="mr-2" />
                   Espace Concierge
                 </Button>
@@ -77,8 +81,8 @@ export function Header() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-10 w-10 rounded-full ml-4">
-                    <Avatar className="h-10 w-10">
-                       <AvatarImage src={user.photoURL ?? ''} alt={user.displayName ?? 'Utilisateur'} />
+                    <Avatar className="h-10 w-10 border-2 border-white/80">
+                      <AvatarImage src={user.photoURL ?? ''} alt={user.displayName ?? 'Utilisateur'} />
                       <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
                     </Avatar>
                   </Button>
@@ -104,11 +108,10 @@ export function Header() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-
             </>
           ) : (
             <Link href="/connexion" passHref>
-              <Button>
+              <Button className="bg-white text-[#3A6A3A] hover:bg-gray-200">
                 <LogIn className="mr-2" />
                 Connexion / Inscription
               </Button>
