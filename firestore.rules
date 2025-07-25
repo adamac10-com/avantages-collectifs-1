@@ -3,23 +3,8 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Allow users to read their own user document and for profiles to be created
-    match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null;
-    }
-
-    // Allow logged-in users to create concierge requests
-    // Allow any authenticated user to read requests (for concierge dashboard)
-    match /conciergeRequests/{requestId} {
-      allow read, create: if request.auth.uid != null;
-    }
-    
-    // Rules for the 'partners' collection
-    // Any authenticated user can read the list of partners.
-    match /partners/{partnerId} {
-        allow read: if request.auth != null;
+    match /{document=**} {
+      allow read, write: if false;
     }
 
     // Règle pour la collection des récompenses
@@ -28,9 +13,28 @@ service cloud.firestore {
       allow read: if request.auth != null;
     }
     
-    // Allow users to read their own transactions and create new ones
+    // Allow users to read their own transactions
     match /transactions/{transactionId} {
-        allow read, create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
     }
+
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null; // Allows creating user profile on signup
+      allow update: if request.auth != null && request.auth.uid == userId; // Allow users to update their own profile
+    }
+
+    // Allow authenticated users to create concierge requests
+    match /conciergeRequests/{requestId} {
+        allow create: if request.auth != null;
+        allow read: if request.auth != null; // Pour que les concierges puissent lire
+        allow update: if request.auth != null; // Pour que la fonction puisse mettre à jour
+    }
+
+    // Allow authenticated users to read the partners list
+    match /partners/{partnerId} {
+      allow read: if request.auth != null;
+    }
+
   }
 }
