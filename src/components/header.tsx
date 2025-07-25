@@ -1,7 +1,7 @@
 
 "use client";
 
-import { Infinity, UserCog, LogOut, LogIn } from "lucide-react";
+import { Infinity, UserCog, LogOut, LogIn, Gift } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAuth, signOut } from "firebase/auth";
@@ -29,6 +29,10 @@ export function Header() {
     router.push("/connexion");
     router.refresh();
   };
+  
+  const handleNavigateToRewards = () => {
+    router.push('/recompenses');
+  }
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return "AC";
@@ -89,6 +93,11 @@ export function Header() {
                       </p>
                     </div>
                   </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleNavigateToRewards}>
+                    <Gift className="mr-2" />
+                    <span>Mes récompenses</span>
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleSignOut}>
                     <LogOut className="mr-2" />
