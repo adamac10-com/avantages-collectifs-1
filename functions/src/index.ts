@@ -2,6 +2,7 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
+import { HttpsError } from "firebase-functions/v2/https";
 
 // Initialisation de l'admin Firebase
 admin.initializeApp();
@@ -90,5 +91,87 @@ export const completeServiceRequest = functions.https.onCall(async (data, contex
       throw error;
     }
     throw new functions.https.HttpsError("internal", "Une erreur interne est survenue.");
+  }
+});
+
+
+/**
+ * Permet à un utilisateur d'échanger ses points de fidélité contre une récompense.
+ */
+export const redeemReward = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Vous devez être connecté pour échanger une récompense."
+    );
+  }
+
+  const { rewardId } = data;
+  if (!rewardId || typeof rewardId !== "string") {
+    throw new HttpsError(
+      "invalid-argument",
+      "Un ID de récompense valide doit être fourni."
+    );
+  }
+
+  const userId = context.auth.uid;
+  logger.info(`Tentative d'échange de la récompense ${rewardId} par l'utilisateur ${userId}`);
+
+  const rewardRef = db.collection("rewards").doc(rewardId);
+  const userRef = db.collection("users").doc(userId);
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      const rewardDoc = await transaction.get(rewardRef);
+      if (!rewardDoc.exists) {
+        throw new HttpsError("not-found", "La récompense demandée n'existe pas.");
+      }
+
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists) {
+        throw new HttpsError("not-found", "Profil utilisateur introuvable.");
+      }
+
+      const reward = rewardDoc.data();
+      const user = userDoc.data();
+      
+      if (!reward || !user) {
+         throw new HttpsError("internal", "Données invalides pour la récompense ou l'utilisateur.");
+      }
+
+      const pointsCost = reward.pointsCost;
+      const userPoints = user.loyaltyPoints;
+
+      if (userPoints < pointsCost) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Points de fidélité insuffisants pour cette récompense."
+        );
+      }
+
+      // Déduire les points et enregistrer la transaction
+      transaction.update(userRef, {
+        loyaltyPoints: admin.firestore.FieldValue.increment(-pointsCost),
+      });
+
+      const transactionRef = db.collection("transactions").doc();
+      transaction.set(transactionRef, {
+        userId: userId,
+        type: "reward_redemption",
+        points: -pointsCost,
+        description: `Échange contre: ${reward.title}`,
+        rewardId: rewardId,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    logger.info(`Échange de la récompense ${rewardId} réussi pour l'utilisateur ${userId}.`);
+    return { success: true, message: "Récompense échangée avec succès." };
+  } catch (error) {
+    logger.error(`Échec de l'échange de la récompense ${rewardId} pour ${userId}:`, error);
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    throw new HttpsError("internal", "Une erreur est survenue lors de l'échange.");
   }
 });
