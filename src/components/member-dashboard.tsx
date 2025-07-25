@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -9,32 +10,51 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Bell, Gift, MessageSquare } from "lucide-react";
-import { memberData } from "@/lib/member-data";
+import { memberData } from "@/lib/member-data"; // Keep for notifications for now
 import { useState, useEffect } from "react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Skeleton } from "./ui/skeleton";
+
+interface UserData {
+  loyaltyPoints: number;
+}
 
 export function MemberDashboard() {
-  // Use state to re-render when memberData changes
-  const [currentMemberData, setCurrentMemberData] = useState(memberData);
+  const { user } = useAuth();
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const updateData = () => {
-      setCurrentMemberData({ ...memberData });
-    };
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
-    // This is a simple event simulation. In a real app, you might use a more robust
-    // state management library or context.
-    window.addEventListener("memberDataUpdate", updateData);
+    const userDocRef = doc(db, "users", user.uid);
+    const unsubscribe = onSnapshot(userDocRef, (doc) => {
+      if (doc.exists()) {
+        setUserData(doc.data() as UserData);
+      } else {
+        // Handle case where user document might not exist yet
+        setUserData({ loyaltyPoints: 0 });
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching user data:", error);
+      setLoading(false);
+    });
 
-    return () => {
-      window.removeEventListener("memberDataUpdate", updateData);
-    };
-  }, []);
+    return () => unsubscribe();
+  }, [user]);
+
+  const welcomeMessage = user ? `Bonjour, ${user.displayName || "Membre"} !` : "Bonjour !";
 
   return (
     <div className="space-y-8">
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
-          Bonjour, {currentMemberData.name} !
+          {welcomeMessage}
         </h1>
         <p className="text-lg text-muted-foreground">
           Ravis de vous revoir. Voici un aperçu de votre espace membre.
@@ -48,7 +68,7 @@ export function MemberDashboard() {
             <CardTitle className="text-xl">Besoin d'aide ?</CardTitle>
           </CardHeader>
           <CardContent>
-            <Button size="lg" className="h-16 w-full max-w-xs text-lg">
+            <Button size="lg" className="h-16 w-full max-w-xs text-lg" disabled={!user}>
               <MessageSquare className="mr-3 h-6 w-6" />
               Contacter mon Concierge
             </Button>
@@ -64,9 +84,15 @@ export function MemberDashboard() {
             <Gift className="h-6 w-6 text-accent" />
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold text-primary">
-              {currentMemberData.loyaltyPoints.toLocaleString("fr-FR")}
-            </div>
+            {loading ? (
+              <Skeleton className="h-10 w-28" />
+            ) : user ? (
+              <div className="text-4xl font-bold text-primary">
+                {(userData?.loyaltyPoints ?? 0).toLocaleString("fr-FR")}
+              </div>
+            ) : (
+               <div className="text-4xl font-bold text-primary">0</div>
+            )}
             <p className="pt-2 text-sm text-muted-foreground">
               Continuez à utiliser nos services pour en gagner plus.
             </p>
@@ -78,7 +104,7 @@ export function MemberDashboard() {
       <div className="space-y-4">
         <h2 className="text-2xl font-bold">Vos notifications</h2>
         <div className="grid gap-4">
-          {currentMemberData.notifications.map((notif) => (
+          {memberData.notifications.map((notif) => (
             <Card key={notif.id}>
               <CardContent className="flex items-start gap-4 p-6">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
@@ -91,7 +117,7 @@ export function MemberDashboard() {
               </CardContent>
             </Card>
           ))}
-          {currentMemberData.notifications.length === 0 && (
+          {memberData.notifications.length === 0 && (
             <Card>
               <CardContent className="p-6">
                 <p className="text-center text-muted-foreground">
