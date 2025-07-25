@@ -88,3 +88,79 @@ export const completeServiceRequest = onCall(async (request) => {
     throw new HttpsError("internal", "Une erreur interne est survenue.");
   }
 });
+
+
+export const redeemReward = onCall(async (request) => {
+  // 1. Vérification de l'authentification
+  if (!request.auth) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Vous devez être connecté pour échanger une récompense.",
+    );
+  }
+
+  const userId = request.auth.uid;
+  const {rewardId} = request.data;
+  if (!rewardId || typeof rewardId !== "string") {
+    throw new HttpsError(
+      "invalid-argument",
+      "L'ID de la récompense est manquant ou invalide.",
+    );
+  }
+
+  logger.info(`Tentative d'échange de la récompense ${rewardId} par l'utilisateur ${userId}`);
+
+  const userRef = db.collection("users").doc(userId);
+  const rewardRef = db.collection("rewards").doc(rewardId);
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      const userDoc = await transaction.get(userRef);
+      const rewardDoc = await transaction.get(rewardRef);
+
+      if (!userDoc.exists) {
+        throw new HttpsError("not-found", "Utilisateur non trouvé.");
+      }
+      if (!rewardDoc.exists) {
+        throw new HttpsError("not-found", "Récompense non trouvée.");
+      }
+
+      const userData = userDoc.data();
+      const rewardData = rewardDoc.data();
+      const userPoints = userData?.loyaltyPoints || 0;
+      const rewardCost = rewardData?.pointsCost || 0;
+
+      // 2. Vérification du solde de points
+      if (userPoints < rewardCost) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Vos points sont insuffisants pour cette récompense.",
+        );
+      }
+
+      // 3. Déduction des points et création de la transaction
+      const newPoints = userPoints - rewardCost;
+      transaction.update(userRef, {loyaltyPoints: newPoints});
+
+      const transactionRef = db.collection("transactions").doc();
+      transaction.set(transactionRef, {
+        userId: userId,
+        type: "reward_redemption",
+        points: -rewardCost,
+        description: `Échange: ${rewardData?.title || "Récompense"}`,
+        rewardId: rewardId,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      logger.info(`Récompense ${rewardId} échangée avec succès par ${userId}.`);
+    });
+
+    return {success: true, message: "Récompense échangée avec succès !"};
+  } catch (error) {
+    logger.error(`Échec de l'échange pour ${userId} et récompense ${rewardId}:`, error);
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    throw new HttpsError("internal", "Une erreur interne est survenue lors de l'échange.");
+  }
+});

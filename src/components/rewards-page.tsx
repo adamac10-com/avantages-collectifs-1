@@ -3,7 +3,8 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { db } from "@/lib/firebase";
+import { db, firebaseApp } from "@/lib/firebase";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { doc, onSnapshot, collection, query, where, orderBy, Timestamp, getDocs } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,6 +54,12 @@ export function RewardsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
+  const [redeemingStates, setRedeemingStates] = useState<{[key: string]: boolean}>({});
+
+
+  const functions = getFunctions(firebaseApp);
+  const redeemReward = httpsCallable(functions, 'redeemReward');
+
 
   useEffect(() => {
     if (!user) {
@@ -66,7 +73,6 @@ export function RewardsPage() {
     const userDocRef = doc(db, "users", user.uid);
     const userUnsubscribe = onSnapshot(userDocRef, (doc) => {
       if (doc.exists()) {
-        // Set default membershipLevel if not present
         const data = doc.data();
         setUserData({
             loyaltyPoints: data.loyaltyPoints || 0,
@@ -109,27 +115,38 @@ export function RewardsPage() {
 
     fetchRewards();
 
-
     return () => {
       userUnsubscribe();
       transactionsUnsubscribe();
     };
   }, [user, toast]);
 
-  const handleExchange = (reward: Reward) => {
-      // This is where the logic to exchange points would go.
-      // For now, it just shows a toast.
-      toast({
-          title: "Échange en cours...",
-          description: `Vous avez demandé à échanger ${reward.pointsCost} points contre "${reward.title}".`
-      })
-  }
+ const handleExchange = async (reward: Reward) => {
+    setRedeemingStates(prev => ({ ...prev, [reward.id]: true }));
+    try {
+        await redeemReward({ rewardId: reward.id });
+        toast({
+            title: "Échange réussi !",
+            description: `Vos points ont été utilisés pour "${reward.title}".`
+        });
+    } catch (error: any) {
+        console.error("Erreur lors de l'échange de la récompense:", error);
+        toast({
+            title: "Échange échoué",
+            description: error.message || "Une erreur inconnue est survenue.",
+            variant: "destructive"
+        });
+    } finally {
+        setRedeemingStates(prev => ({ ...prev, [reward.id]: false }));
+    }
+}
+
 
   const filteredRewards = userData ? rewards.filter(reward => {
       if (userData.membershipLevel === 'privilege') {
-          return true; // Privilège members see all rewards
+          return true;
       }
-      return reward.requiredLevel === 'essentiel'; // Essentiel members see only essentiel rewards
+      return reward.requiredLevel === 'essentiel';
   }) : [];
 
 
@@ -164,7 +181,6 @@ export function RewardsPage() {
         </p>
       </div>
 
-      {/* Loyalty Points Balance */}
       <Card className="bg-primary text-primary-foreground">
         <CardHeader>
           <CardTitle className="text-2xl flex items-center gap-4">
@@ -183,7 +199,6 @@ export function RewardsPage() {
         </CardContent>
       </Card>
 
-      {/* Transactions History */}
       <div className="space-y-4">
         <h2 className="text-2xl font-bold">Historique des transactions</h2>
         <Card>
@@ -203,7 +218,7 @@ export function RewardsPage() {
                       <TableCell className="font-medium">{tx.description}</TableCell>
                       <TableCell>{tx.timestamp.toDate().toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric"})}</TableCell>
                       <TableCell className="text-right">
-                         <Badge variant={tx.points > 0 ? "secondary" : "destructive"}>
+                         <Badge variant={tx.points >= 0 ? "secondary" : "destructive"}>
                            {tx.points > 0 ? `+${tx.points}` : tx.points}
                          </Badge>
                       </TableCell>
@@ -222,7 +237,6 @@ export function RewardsPage() {
         </Card>
       </div>
 
-      {/* Rewards Catalog */}
       <div className="space-y-4">
         <h2 className="text-2xl font-bold">Échanger mes points</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -239,15 +253,14 @@ export function RewardsPage() {
                         )}
                     </CardHeader>
                     <CardContent className="flex-grow">
-                        {/* Placeholder for reward description */}
                     </CardContent>
                     <CardFooter>
                          <Button 
                             className="w-full min-h-[48px]"
-                            disabled={!userData || userData.loyaltyPoints < reward.pointsCost}
+                            disabled={!userData || userData.loyaltyPoints < reward.pointsCost || redeemingStates[reward.id]}
                             onClick={() => handleExchange(reward)}
                          >
-                            Échanger
+                            {redeemingStates[reward.id] ? "Échange en cours..." : "Échanger"}
                          </Button>
                     </CardFooter>
                 </Card>
