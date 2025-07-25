@@ -1,4 +1,3 @@
-
 "use client";
 
 import Image from 'next/image';
@@ -44,7 +43,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-brand-green text-white border-b-2 border-brand-gold backdrop-blur supports-[backdrop-filter]:bg-brand-green/60">
+    <header className="sticky top-0 z-40 w-full bg-brand-green text-white border-b-2 border-brand-gold">
       <div className="container mx-auto flex h-20 max-w-6xl items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex items-center">
