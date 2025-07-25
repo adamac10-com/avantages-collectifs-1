@@ -2,6 +2,7 @@
 "use client";
 
 import { Infinity, UserCog, LogOut, LogIn, Gift } from "lucide-react";
+import Image from 'next/image';
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAuth, signOut } from "firebase/auth";
@@ -47,12 +48,10 @@ export function Header() {
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-20 max-w-6xl items-center justify-between px-4">
         <div className="flex items-center gap-4">
-          <a href="/" className="flex items-center space-x-3">
-            <Infinity className="h-10 w-10 text-primary" />
-            <span className="inline-block text-xl font-bold">
-              Avantages Collectifs
-            </span>
-          </a>
+          <Link href="/" className="flex items-center">
+            {/* Ligne de test avec une balise img standard */}
+            <img src="/logo.png" alt="Logo Avantages Collectifs" style={{ width: "200px", height: "auto" }} />
+          </Link>
         </div>
         <nav className="flex items-center gap-2">
           {loading ? (
