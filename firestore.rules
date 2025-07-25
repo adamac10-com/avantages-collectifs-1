@@ -1,40 +1,37 @@
-
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
-    }
 
-    // Règle pour la collection des récompenses
-    // Tout utilisateur connecté peut lire la liste des récompenses.
-    match /rewards/{rewardId} {
-      allow read: if request.auth != null;
-    }
-    
-    // Allow users to read their own transactions
-    match /transactions/{transactionId} {
-      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
-    }
-
-    match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null; // Allows creating user profile on signup
-      allow update: if request.auth != null && request.auth.uid == userId; // Allow users to update their own profile
-    }
-
-    // Allow authenticated users to create concierge requests
-    match /conciergeRequests/{requestId} {
-        allow create: if request.auth != null;
-        allow read: if request.auth != null; // Pour que les concierges puissent lire
-        allow update: if request.auth != null; // Pour que la fonction puisse mettre à jour
-    }
-
-    // Allow authenticated users to read the partners list
+    // Les utilisateurs connectés peuvent lire la liste des partenaires.
     match /partners/{partnerId} {
       allow read: if request.auth != null;
     }
 
+    // Les utilisateurs connectés peuvent lire la liste des récompenses.
+    match /rewards/{rewardId} {
+      allow read: if request.auth != null;
+    }
+
+    // Un utilisateur peut lire son propre historique de transactions.
+    match /transactions/{transactionId} {
+      allow read: if request.auth.uid == resource.data.userId;
+    }
+
+    // Seuls les concierges (rôle à définir) peuvent lire toutes les demandes.
+    // Pour le développement, nous autorisons tout utilisateur connecté.
+    match /conciergeRequests/{requestId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth.uid == request.resource.data.memberId;
+    }
+
+    // Chaque utilisateur peut accéder à son propre document.
+    match /users/{userId} {
+      allow read, update: if request.auth.uid == userId;
+    }
+
+    // Tout utilisateur connecté peut interagir avec le forum.
+    match /forum_threads/{threadId}/{document=**} {
+      allow read, write: if request.auth != null;
+    }
   }
 }
