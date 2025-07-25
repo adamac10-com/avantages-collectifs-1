@@ -1,12 +1,12 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, setPersistence, browserSessionPersistence, browserLocalPersistence } from "firebase/auth";
 import { firebaseApp } from "@/lib/firebase";
 import Image from "next/image";
 
@@ -28,7 +28,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { Checkbox } from "./ui/checkbox";
+import { Label } from "./ui/label";
+
 
 const authSchema = z.object({
   name: z.string().optional(),
@@ -39,6 +41,7 @@ const authSchema = z.object({
 export function AuthForm() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const router = useRouter();
   const { toast } = useToast();
   const auth = getAuth(firebaseApp);
@@ -68,6 +71,8 @@ export function AuthForm() {
           description: "Bienvenue ! Vous allez être redirigé.",
         });
       } else {
+        const persistenceType = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+        await setPersistence(auth, persistenceType);
         await signInWithEmailAndPassword(auth, values.email, values.password);
         toast({
           title: "Connexion réussie !",
@@ -160,6 +165,16 @@ export function AuthForm() {
                 </FormItem>
               )}
             />
+             {!isSignUp && (
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="remember-me"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMe(Boolean(checked))}
+                />
+                <Label htmlFor="remember-me" className="cursor-pointer text-sm">Se souvenir de moi</Label>
+              </div>
+            )}
             <Button type="submit" size="lg" className="w-full min-h-[48px]" disabled={isLoading}>
               {isLoading ? "Chargement..." : (isSignUp ? "S'inscrire" : "Se connecter")}
             </Button>
