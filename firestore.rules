@@ -1,21 +1,30 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow public read access to the partners collection
+
+    // Allow public read access for partners list
     match /partners/{partnerId} {
       allow read: if true;
     }
 
-    // Allow authenticated users to create and view concierge requests
+    // Allow authenticated users to create requests.
+    // Allow authenticated users to read all requests (for concierge dashboard)
     match /conciergeRequests/{requestId} {
-      allow read, create: if request.auth != null;
+      allow create: if request.auth != null;
+      allow read: if request.auth != null;
+      allow update: if request.auth != null; // Needed for concierge function
     }
 
-    // Default to locked down for any other collection
-    match /{document=**} {
-      allow read, write: if false;
+    // Users can only read their own document
+    match /users/{userId} {
+      allow read, update: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Users can only read their own transactions
+    match /transactions/{transactionId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null; // Allow functions to create transactions
     }
   }
 }
