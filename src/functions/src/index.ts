@@ -52,15 +52,20 @@ export const completeServiceRequest = onCall(async (request) => {
       if (!requestDoc.exists) {
         throw new HttpsError("not-found", "La demande n'a pas été trouvée.");
       }
+      
+      const requestData = requestDoc.data();
+      if (!requestData) {
+        throw new HttpsError("not-found", "Les données de la demande sont introuvables.");
+      }
 
       // Vérifier si la requête a déjà été traitée
-      if (requestDoc.data()?.status === 'Terminé') {
+      if (requestData.status === 'Terminé') {
         logger.warn(`La demande ${requestId} a déjà été marquée comme terminée.`);
         // On ne retourne pas d'erreur pour ne pas bloquer le client, mais on logge l'action
         return;
       }
 
-      const memberId = requestDoc.data()?.memberId;
+      const memberId = requestData.memberId;
       if (!memberId) {
         throw new HttpsError("internal", "L'ID du membre est manquant dans la demande.");
       }
@@ -74,11 +79,13 @@ export const completeServiceRequest = onCall(async (request) => {
       });
 
       const transactionRef = db.collection("transactions").doc();
+      const serviceDescription = requestData.serviceName || requestData.serviceDemande || `demande ${requestId}`;
+      
       transaction.set(transactionRef, {
         userId: memberId,
         type: "service_reward",
         points: pointsToAward,
-        description: `Récompense pour la demande: ${requestDoc.data()?.serviceDemande || requestId}`,
+        description: `Récompense pour : ${serviceDescription}`,
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
       });
     });
@@ -90,5 +97,98 @@ export const completeServiceRequest = onCall(async (request) => {
       throw error;
     }
     throw new HttpsError("internal", "Une erreur interne est survenue lors du traitement de la demande.");
+  }
+});
+
+export const createUserProfile = onCall(async (request) => {
+    const user = request.data;
+    logger.info(`Création du profil pour le nouvel utilisateur: ${user.uid}`);
+
+    const userRef = db.collection("users").doc(user.uid);
+
+    return userRef.set({
+        email: user.email,
+        displayName: user.displayName || "Nouveau Membre",
+        membershipLevel: "essentiel",
+        loyaltyPoints: 0,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+});
+
+export const redeemReward = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Vous devez être connecté pour échanger une récompense."
+    );
+  }
+
+  const { rewardId } = request.data;
+  if (!rewardId || typeof rewardId !== "string") {
+    throw new HttpsError(
+      "invalid-argument",
+      "Un ID de récompense valide doit être fourni."
+    );
+  }
+
+  const userId = request.auth.uid;
+  logger.info(`Tentative d'échange de la récompense ${rewardId} par l'utilisateur ${userId}`);
+
+  const rewardRef = db.collection("rewards").doc(rewardId);
+  const userRef = db.collection("users").doc(userId);
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      const rewardDoc = await transaction.get(rewardRef);
+      if (!rewardDoc.exists) {
+        throw new HttpsError("not-found", "La récompense demandée n'existe pas.");
+      }
+
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists) {
+        throw new HttpsError("not-found", "Profil utilisateur introuvable.");
+      }
+
+      const reward = rewardDoc.data();
+      const user = userDoc.data();
+      
+      if (!reward || !user) {
+         throw new HttpsError("internal", "Données invalides pour la récompense ou l'utilisateur.");
+      }
+
+      const pointsCost = reward.pointsCost;
+      const userPoints = user.loyaltyPoints;
+
+      if (userPoints < pointsCost) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Points de fidélité insuffisants pour cette récompense."
+        );
+      }
+
+      // Déduire les points et enregistrer la transaction
+      transaction.update(userRef, {
+        loyaltyPoints: admin.firestore.FieldValue.increment(-pointsCost),
+      });
+
+      const transactionRef = db.collection("transactions").doc();
+      transaction.set(transactionRef, {
+        userId: userId,
+        type: "reward_redemption",
+        points: -pointsCost,
+        description: `Échange contre: ${reward.title}`,
+        rewardId: rewardId,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    logger.info(`Échange de la récompense ${rewardId} réussi pour l'utilisateur ${userId}.`);
+    return { success: true, message: "Récompense échangée avec succès." };
+  } catch (error) {
+    logger.error(`Échec de l'échange de la récompense ${rewardId} pour ${userId}:`, error);
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    throw new HttpsError("internal", "Une erreur est survenue lors de l'échange.");
   }
 });
