@@ -105,7 +105,7 @@ export function AuthForm() {
     <Card>
       <CardHeader className="items-center">
         <Image 
-          src="/logo.png"
+          src="/logo2.png"
           alt="Logo Avantages Collectifs"
           width={180}
           height={45}
