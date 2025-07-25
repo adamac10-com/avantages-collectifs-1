@@ -50,8 +50,8 @@ export function Header() {
             <Image
               src="/logo.png"
               alt="Logo Avantages Collectifs"
-              width={160} 
-              height={40}
+              width={220}
+              height={55}
               priority
             />
           </Link>
