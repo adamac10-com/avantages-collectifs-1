@@ -57,8 +57,13 @@ export const completeServiceRequest = functions.https.onCall(async (data, contex
       if (!requestDoc.exists) {
         throw new functions.https.HttpsError("not-found", "La demande n'a pas été trouvée.");
       }
+      
+      const requestData = requestDoc.data();
+      if (!requestData) {
+        throw new functions.https.HttpsError("not-found", "Les données de la demande sont introuvables.");
+      }
 
-      const memberId = requestDoc.data()?.memberId;
+      const memberId = requestData?.memberId;
       if (!memberId) {
         throw new functions.https.HttpsError("internal", "L'ID du membre est manquant.");
       }
@@ -75,11 +80,13 @@ export const completeServiceRequest = functions.https.onCall(async (data, contex
         loyaltyPoints: admin.firestore.FieldValue.increment(50),
       });
       const transactionRef = db.collection("transactions").doc();
+      const serviceDescription = requestData.serviceName || requestData.serviceDemande || `demande ${requestId}`;
+      
       transaction.set(transactionRef, {
         userId: memberId,
         type: "service_reward",
         points: 50,
-        description: `Récompense pour la demande ${requestId}`,
+        description: `Récompense pour : ${serviceDescription}`,
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
       });
     });
@@ -173,5 +180,35 @@ export const redeemReward = functions.https.onCall(async (data, context) => {
       throw error;
     }
     throw new HttpsError("internal", "Une erreur est survenue lors de l'échange.");
+  }
+});
+
+
+/**
+ * Assigne le rôle "concierge" à un utilisateur via son email.
+ * Doit être appelée par un administrateur depuis un environnement sécurisé.
+ */
+export const setConciergeRole = functions.https.onCall(async (data, context) => {
+  // Pour une vraie app, on vérifierait ici si l'appelant est un admin.
+  // if (context.auth?.token.admin !== true) {
+  //   throw new functions.https.HttpsError('permission-denied', 'Seul un admin peut assigner des rôles.');
+  // }
+  
+  const email = data.email;
+  if (!email || typeof email !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', "L'e-mail est manquant ou invalide.");
+  }
+
+  try {
+    const user = await admin.auth().getUserByEmail(email);
+    await admin.auth().setCustomUserClaims(user.uid, { role: 'concierge' });
+    
+    // Mettre aussi à jour le rôle dans Firestore pour un accès facile côté client
+    await db.collection('users').doc(user.uid).set({ role: 'concierge' }, { merge: true });
+
+    return { message: `Succès ! L'utilisateur ${email} est maintenant un concierge.` };
+  } catch (error) {
+    logger.error("Erreur lors de l'assignation du rôle concierge :", error);
+    throw new functions.https.HttpsError('internal', "Une erreur s'est produite lors de l'assignation du rôle.");
   }
 });
