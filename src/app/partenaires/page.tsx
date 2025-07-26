@@ -1,50 +1,56 @@
-// Fichier : src/app/partenaires/page.tsx
+"use client";
 
+import React, { useEffect } from 'react';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { getAuth } from 'firebase/auth';
+import { firebaseApp } from '@/lib/firebase'; // Correction: Importer firebaseApp
 import { PartnerDirectory } from '@/components/partner-directory';
-import { getFirestore, collection, getDocs } from 'firebase/firestore';
-import { firebaseApp } from '@/lib/firebase';
-import { Partner } from '@/types/partner';
+import { Skeleton } from '@/components/ui/skeleton';
 
-// Cette fonction s'exécute côté serveur pour récupérer les données
-async function getPartners(): Promise<Partner[]> {
-  try {
-    const db = getFirestore(firebaseApp);
-    const partnersColRef = collection(db, 'partners');
-    const partnerSnapshot = await getDocs(partnersColRef);
+// Initialiser l'authentification Firebase
+const auth = getAuth(firebaseApp);
 
-    if (partnerSnapshot.empty) {
-      console.log("Aucun document trouvé dans la collection 'partners'.");
-      return [];
+/**
+ * Page publique affichant l'annuaire des partenaires.
+ * Vérifie l'état de l'authentification à des fins de débogage.
+ */
+export default function PartnersPage() {
+  // 4. Utilisation du hook pour obtenir l'utilisateur et l'état de chargement
+  const [user, loading] = useAuthState(auth);
+
+  // 5. useEffect pour logger l'état d'authentification au chargement
+  useEffect(() => {
+    if (loading) {
+      console.log("Vérification de l'authentification en cours...");
+    } else if (user) {
+      // Pour des raisons de sécurité et de confidentialité, ne loguez que des informations non sensibles comme l'email ou l'UID.
+      console.log("Utilisateur connecté:", user.email);
+    } else {
+      console.log("Aucun utilisateur connecté.");
     }
+  }, [user, loading]);
 
-    const partnerList = partnerSnapshot.docs.map(doc => {
-      const data = doc.data();
-      // On s'assure de retourner un objet Partner bien formé et "simple"
-      return {
-        id: doc.id,
-        name: data.name || "Nom manquant",
-        servicePillar: data.servicePillar || "Catégorie manquante",
-        description: data.description || "Description manquante",
-      } as Partner;
-    });
-    
-    console.log("Données des partenaires récupérées côté serveur :", partnerList);
-    return partnerList;
-
-  } catch (error) {
-    console.error("Erreur lors de la récupération des partenaires :", error);
-    // En cas d'erreur (ex: permissions), on retourne un tableau vide pour ne pas crasher la page.
-    return [];
-  }
-}
-
-// La page est un composant serveur asynchrone
-export default async function PartnersPage() {
-  const realPartnersData = await getPartners();
-  
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-8 md:py-12">
-      <PartnerDirectory allPartners={realPartnersData} />
+    <div className="container mx-auto px-4 py-8">
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
+          Découvrez nos Partenaires
+        </h1>
+        <p className="mt-4 text-lg text-muted-foreground">
+          Profitez d'avantages exclusifs négociés pour vous auprès de notre réseau de confiance.
+        </p>
+      </div>
+
+      {/* Affiche un skeleton pendant la vérification de l'auth pour une meilleure UX */}
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <Skeleton className="h-[200px] w-full rounded-lg" />
+          <Skeleton className="h-[200px] w-full rounded-lg" />
+          <Skeleton className="h-[200px] w-full rounded-lg" />
+        </div>
+      ) : (
+        <PartnerDirectory />
+      )}
     </div>
   );
 }

@@ -1,157 +1,106 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { useAuth } from "@/hooks/useAuth";
-import { Partner } from "@/types/partner";
-import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
-import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase";
+import React from 'react';
+import { useCollection } from 'react-firebase-hooks/firestore';
+import { collection } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 
-const servicePillars = [
-  "Protection & Assurance",
-  "Habitat & Rénovation",
-  "Assistance & Quotidien",
-  "Loisirs & Voyages",
-];
+/**
+ * Affiche la liste des partenaires depuis la collection Firestore 'partners'.
+ * Gère les états de chargement, d'erreur et d'affichage des données.
+ */
+export function PartnerDirectory() {
+  // 3. Créer une référence à la collection 'partners'
+  const partnersCollectionRef = collection(db, 'partners');
 
-export function PartnerDirectory({ allPartners }: { allPartners: Partner[] }) {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [filter, setFilter] = useState<string | null>(null);
+  // 4. Utiliser le hook useCollection pour récupérer les données en temps réel
+  const [partnersSnapshot, loading, error] = useCollection(partnersCollectionRef);
 
-  const handleRequestService = async (partner: Partner) => {
-    console.log("ACTION: Début de handleRequestService.");
+  // 5. Gérer l'état de chargement
+  if (loading) {
+    return (
+      <div className="border rounded-lg p-4">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nom du partenaire</TableHead>
+              <TableHead>Pilier de service</TableHead>
+              <TableHead>Description</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {/* Afficher plusieurs skeletons pour simuler le chargement */}
+            {Array.from({ length: 3 }).map((_, index) => (
+              <TableRow key={index}>
+                <TableCell><Skeleton className="h-6 w-32" /></TableCell>
+                <TableCell><Skeleton className="h-6 w-40" /></TableCell>
+                <TableCell><Skeleton className="h-6 w-full" /></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  }
 
-    if (!user) {
-      console.error("ERREUR FATALE: Utilisateur non connecté. Opération annulée.");
-      toast({
-        title: "Erreur",
-        description: "Vous devez être connecté pour faire une demande.",
-        variant: "destructive"
-      });
-      return;
-    }
+  // 5. Gérer l'état d'erreur
+  if (error) {
+    console.error("Erreur de chargement des partenaires depuis Firestore:", error);
+    return (
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Erreur de chargement</AlertTitle>
+        <AlertDescription>
+          Impossible de récupérer la liste des partenaires. Vérifiez votre connexion
+          ou les permissions Firestore.
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
-    if (!partner || !partner.name) {
-      console.error("ERREUR FATALE: Données du partenaire manquantes ou invalides.", partner);
-       toast({
-        title: "Erreur",
-        description: "Impossible de traiter la demande pour ce partenaire.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const requestData = {
-      memberId: user.uid,
-      memberName: user.displayName || "Nom non disponible",
-      partnerName: partner.name,
-      serviceDemande: partner.name,
-      status: "Nouveau",
-      createdAt: serverTimestamp(),
-    };
-
-    console.log("DATA: Données préparées pour l'écriture :", requestData);
-
-    try {
-      const requestsCollectionRef = collection(db, 'conciergeRequests');
-      
-      console.log("SENDING: Envoi des données à Firestore...");
-      await addDoc(requestsCollectionRef, requestData);
-      
-      console.log("SUCCESS: Demande enregistrée avec succès dans Firestore.");
-      toast({
-          title: "Demande transmise !",
-          description: "Votre concierge vous recontactera très prochainement.",
-      });
-
-    } catch (error) {
-      console.error("FIRESTORE ERROR: Échec de l'écriture dans Firestore.", error);
-      toast({
-        title: "Erreur",
-        description: "Une erreur est survenue lors de la transmission de votre demande.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const filteredPartners = useMemo(() => {
-    if (!filter) {
-      return allPartners;
-    }
-    return allPartners.filter((p) => p.servicePillar === filter);
-  }, [filter, allPartners]);
-
+  // 5. Gérer l'état de succès (données disponibles)
   return (
-    <div className="space-y-8">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Nos Partenaires de Confiance</h1>
-        <p className="text-lg text-muted-foreground">
-          Découvrez les services exclusifs négociés pour vous.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          onClick={() => setFilter(null)}
-          variant={filter === null ? "default" : "outline"}
-          size="lg"
-          className="min-h-[48px]"
-        >
-          Tous
-        </Button>
-        {servicePillars.map((pillar) => (
-          <Button
-            key={pillar}
-            onClick={() => setFilter(pillar)}
-            variant={filter === pillar ? "default" : "outline"}
-            size="lg"
-            className="min-h-[48px]"
-          >
-            {pillar}
-          </Button>
-        ))}
-      </div>
-
-      {filteredPartners && filteredPartners.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredPartners.map((partner) => (
-            <Card key={partner.id} className="flex flex-col">
-              <CardHeader>
-                <CardTitle className="text-xl">{partner.name}</CardTitle>
-                <CardDescription className="text-primary">{partner.servicePillar}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex-grow">
-                <p className="text-muted-foreground">{partner.description}</p>
-              </CardContent>
-              <div className="p-6 pt-0">
-                <Button
-                  onClick={() => handleRequestService(partner)}
-                  className="w-full min-h-[48px] text-base"
-                  disabled={!user}
-                >
-                  Demander ce service via mon concierge
-                </Button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      ) : (
-         <Card>
-            <CardContent className="p-10 text-center text-muted-foreground">
-                <p className="font-bold text-lg mb-2">Aucun partenaire à afficher.</p>
-                <p>Veuillez vérifier les points suivants :</p>
-                <ul className="list-disc list-inside text-left mx-auto max-w-md mt-2">
-                    <li>La collection <code className="bg-muted px-1 rounded">partners</code> existe bien dans votre base de données Firestore.</li>
-                    <li>Cette collection contient des documents.</li>
-                    <li>Chaque document a bien les champs <code className="bg-muted px-1 rounded">name</code>, <code className="bg-muted px-1 rounded">servicePillar</code>, et <code className="bg-muted px-1 rounded">description</code>.</li>
-                </ul>
-            </CardContent>
-         </Card>
-      )}
+    <div className="border rounded-lg">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[200px]">Nom du partenaire</TableHead>
+            <TableHead className="w-[220px]">Pilier de service</TableHead>
+            <TableHead>Description</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {partnersSnapshot && partnersSnapshot.docs.length > 0 ? (
+            partnersSnapshot.docs.map((doc) => {
+              const data = doc.data();
+              return (
+                <TableRow key={doc.id}>
+                  <TableCell className="font-medium">{data.name}</TableCell>
+                  <TableCell>{data.servicePillar}</TableCell>
+                  <TableCell>{data.description}</TableCell>
+                </TableRow>
+              );
+            })
+          ) : (
+            <TableRow>
+              <TableCell colSpan={3} className="text-center h-24">
+                Aucun partenaire trouvé.
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
     </div>
   );
 }

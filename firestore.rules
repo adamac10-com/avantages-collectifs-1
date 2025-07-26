@@ -3,14 +3,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Règle pour la collection 'partners'
-    // Objectif : Permettre la lecture à tous les utilisateurs authentifiés,
-    // et interdire toutes les écritures (création, mise à jour, suppression) depuis le client.
     match /partners/{partnerId} {
-      // Tout utilisateur authentifié peut lire les documents de cette collection.
       allow read: if request.auth != null;
-
-      // Interdit explicitement toutes les opérations d'écriture (create, update, delete)
-      // depuis le client. Ces opérations doivent passer par un backend sécurisé (Cloud Functions).
       allow write: if false;
     }
 
@@ -24,8 +18,7 @@ service cloud.firestore {
       allow read: if request.auth.uid == resource.data.userId;
     }
 
-    // Seuls les concierges (rôle à définir) peuvent lire toutes les demandes.
-    // Pour le développement, nous autorisons tout utilisateur connecté.
+    // Règles pour les demandes de service
     match /conciergeRequests/{requestId} {
       allow read: if request.auth != null;
       allow create: if request.auth.uid == request.resource.data.memberId;

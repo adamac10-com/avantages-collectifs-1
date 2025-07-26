@@ -8,6 +8,14 @@ import * as logger from "firebase-functions/logger";
 admin.initializeApp();
 const db = admin.firestore();
 
+// Liste des piliers de service autorisés
+const SERVICE_PILLARS = [
+  "Protection & Assurance",
+  "Habitat & Rénovation",
+  "Assistance & Quotidien",
+  "Loisirs & Voyages",
+];
+
 /**
  * Se déclenche à la création d'un nouvel utilisateur Auth
  * et crée son profil dans la collection 'users' de Firestore.
@@ -17,11 +25,11 @@ export const createUserProfile = functions.auth.user().onCreate(async (user) => 
 
   const newUserProfile = {
     uid: user.uid,
-    email: user.email || "", 
-    displayName: user.displayName || "Nouveau Membre", 
-    photoURL: user.photoURL || null, 
-    membershipLevel: "essentiel", 
-    loyaltyPoints: 0, 
+    email: user.email || "",
+    displayName: user.displayName || "Nouveau Membre",
+    photoURL: user.photoURL || null,
+    membershipLevel: "essentiel",
+    loyaltyPoints: 0,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     role: "member", // Assign default role
   };
@@ -43,72 +51,72 @@ export const createUserProfile = functions.auth.user().onCreate(async (user) => 
  * de la marquer comme "Terminé" et d'attribuer des points au membre.
  */
 export const completeServiceRequest = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError("unauthenticated", "La fonction doit être appelée par un utilisateur authentifié.");
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "La fonction doit être appelée par un utilisateur authentifié.");
+  }
+
+  // Pour une sécurité accrue, on vérifierait le rôle du concierge ici aussi.
+  // const callerClaims = request.auth.token;
+  // if (callerClaims.role !== 'concierge') {
+  //     throw new HttpsError('permission-denied', 'Seul un concierge peut valider une demande.');
+  // }
+
+  const {requestId} = request.data;
+  if (!requestId || typeof requestId !== "string") {
+    throw new HttpsError("invalid-argument", "La fonction doit être appelée avec un 'requestId' valide.");
+  }
+
+  logger.info(`Validation de la demande ${requestId} par ${request.auth.uid}`);
+
+  try {
+    const requestRef = db.collection("conciergeRequests").doc(requestId);
+
+    await db.runTransaction(async (transaction) => {
+      const requestDoc = await transaction.get(requestRef);
+      if (!requestDoc.exists) {
+        throw new HttpsError("not-found", "La demande n'a pas été trouvée.");
+      }
+
+      const requestData = requestDoc.data();
+      if (!requestData) {
+        throw new HttpsError("not-found", "Les données de la demande sont introuvables.");
+      }
+
+      const memberId = requestData?.memberId;
+      if (!memberId) {
+        throw new HttpsError("internal", "L'ID du membre est manquant.");
+      }
+      const memberRef = db.collection("users").doc(memberId);
+
+      const memberDoc = await transaction.get(memberRef);
+      if (!memberDoc.exists) {
+        throw new HttpsError("not-found", `Le profil du membre ${memberId} n'existe pas.`);
+      }
+
+      transaction.update(requestRef, {status: "Terminé"});
+      transaction.update(memberRef, {
+        loyaltyPoints: admin.firestore.FieldValue.increment(50),
+      });
+      const transactionRef = db.collection("transactions").doc();
+      const serviceDescription = requestData.serviceName || requestData.serviceDemande || `demande ${requestId}`;
+
+      transaction.set(transactionRef, {
+        userId: memberId,
+        type: "service_reward",
+        points: 50,
+        description: `Récompense pour : ${serviceDescription}`,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    return {success: true, message: "La demande a été validée."};
+  } catch (error) {
+    logger.error("Erreur lors de la validation :", error);
+    if (error instanceof HttpsError) {
+      throw error;
     }
-
-    // Pour une sécurité accrue, on vérifierait le rôle du concierge ici aussi.
-    // const callerClaims = request.auth.token;
-    // if (callerClaims.role !== 'concierge') {
-    //     throw new HttpsError('permission-denied', 'Seul un concierge peut valider une demande.');
-    // }
-
-    const {requestId} = request.data;
-    if (!requestId || typeof requestId !== "string") {
-        throw new HttpsError("invalid-argument", "La fonction doit être appelée avec un 'requestId' valide.");
-    }
-
-    logger.info(`Validation de la demande ${requestId} par ${request.auth.uid}`);
-
-    try {
-        const requestRef = db.collection("conciergeRequests").doc(requestId);
-
-        await db.runTransaction(async (transaction) => {
-            const requestDoc = await transaction.get(requestRef);
-            if (!requestDoc.exists) {
-                throw new HttpsError("not-found", "La demande n'a pas été trouvée.");
-            }
-            
-            const requestData = requestDoc.data();
-            if (!requestData) {
-                throw new HttpsError("not-found", "Les données de la demande sont introuvables.");
-            }
-
-            const memberId = requestData?.memberId;
-            if (!memberId) {
-                throw new HttpsError("internal", "L'ID du membre est manquant.");
-            }
-            const memberRef = db.collection("users").doc(memberId);
-            
-            const memberDoc = await transaction.get(memberRef);
-            if (!memberDoc.exists) {
-                throw new HttpsError("not-found", `Le profil du membre ${memberId} n'existe pas.`);
-            }
-
-            transaction.update(requestRef, {status: "Terminé"});
-            transaction.update(memberRef, {
-                loyaltyPoints: admin.firestore.FieldValue.increment(50),
-            });
-            const transactionRef = db.collection("transactions").doc();
-            const serviceDescription = requestData.serviceName || requestData.serviceDemande || `demande ${requestId}`;
-            
-            transaction.set(transactionRef, {
-                userId: memberId,
-                type: "service_reward",
-                points: 50,
-                description: `Récompense pour : ${serviceDescription}`,
-                timestamp: admin.firestore.FieldValue.serverTimestamp(),
-            });
-        });
-
-        return {success: true, message: "La demande a été validée."};
-    } catch (error) {
-        logger.error("Erreur lors de la validation :", error);
-        if (error instanceof HttpsError) {
-            throw error;
-        }
-        throw new HttpsError("internal", "Une erreur interne est survenue.");
-    }
+    throw new HttpsError("internal", "Une erreur interne est survenue.");
+  }
 });
 
 /**
@@ -119,7 +127,7 @@ export const redeemReward = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "Vous devez être connecté pour échanger une récompense.");
   }
 
-  const { rewardId } = request.data;
+  const {rewardId} = request.data;
   if (!rewardId || typeof rewardId !== "string") {
     throw new HttpsError("invalid-argument", "Un ID de récompense valide doit être fourni.");
   }
@@ -144,9 +152,9 @@ export const redeemReward = onCall(async (request) => {
 
       const reward = rewardDoc.data();
       const user = userDoc.data();
-      
+
       if (!reward || !user) {
-         throw new HttpsError("internal", "Données invalides pour la récompense ou l'utilisateur.");
+        throw new HttpsError("internal", "Données invalides pour la récompense ou l'utilisateur.");
       }
 
       const pointsCost = reward.pointsCost;
@@ -172,7 +180,7 @@ export const redeemReward = onCall(async (request) => {
     });
 
     logger.info(`Échange de la récompense ${rewardId} réussi pour l'utilisateur ${userId}.`);
-    return { success: true, message: "Récompense échangée avec succès." };
+    return {success: true, message: "Récompense échangée avec succès."};
   } catch (error) {
     logger.error(`Échec de l'échange de la récompense ${rewardId} pour ${userId}:`, error);
     if (error instanceof HttpsError) {
@@ -190,7 +198,7 @@ export const redeemReward = onCall(async (request) => {
 export const setConciergeRole = onCall(async (request) => {
   // Étape 1: Vérifier que l'appelant est authentifié
   if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Vous devez être authentifié pour effectuer cette action.');
+    throw new HttpsError("unauthenticated", "Vous devez être authentifié pour effectuer cette action.");
   }
 
   // Étape 2: Vérifier que l'appelant a les droits (admin ou concierge)
@@ -198,17 +206,17 @@ export const setConciergeRole = onCall(async (request) => {
   const callerAuth = await admin.auth().getUser(callerUid);
   const callerClaims = callerAuth.customClaims;
 
-  if (callerClaims?.role !== 'admin' && callerClaims?.role !== 'concierge') {
-      logger.warn(`L'utilisateur ${callerUid} a tenté d'assigner un rôle sans autorisation.`);
-      throw new HttpsError('permission-denied', 'Seul un administrateur ou un concierge peut assigner des rôles.');
+  if (callerClaims?.role !== "admin" && callerClaims?.role !== "concierge") {
+    logger.warn(`L'utilisateur ${callerUid} a tenté d'assigner un rôle sans autorisation.`);
+    throw new HttpsError("permission-denied", "Seul un administrateur ou un concierge peut assigner des rôles.");
   }
 
   // Étape 3: Valider les données d'entrée
   const email = request.data.email;
-  if (!email || typeof email !== 'string') {
-    throw new HttpsError('invalid-argument', "L'e-mail est manquant ou invalide.");
+  if (!email || typeof email !== "string") {
+    throw new HttpsError("invalid-argument", "L'e-mail est manquant ou invalide.");
   }
-  
+
   logger.info(`L'utilisateur ${callerUid} (${callerClaims.role}) tente de promouvoir ${email} au rang de concierge.`);
 
   try {
@@ -216,19 +224,171 @@ export const setConciergeRole = onCall(async (request) => {
     const userToPromote = await admin.auth().getUserByEmail(email);
 
     // Étape 5: Assigner le custom claim
-    await admin.auth().setCustomUserClaims(userToPromote.uid, { role: 'concierge' });
-    
+    await admin.auth().setCustomUserClaims(userToPromote.uid, {role: "concierge"});
+
     // Étape 6: Mettre aussi à jour le rôle dans Firestore pour un accès facile côté client
-    await db.collection('users').doc(userToPromote.uid).set({ role: 'concierge' }, { merge: true });
+    await db.collection("users").doc(userToPromote.uid).set({role: "concierge"}, {merge: true});
 
     logger.info(`Succès ! L'utilisateur ${email} (UID: ${userToPromote.uid}) est maintenant un concierge.`);
-    return { message: `Succès ! L'utilisateur ${email} est maintenant un concierge.` };
+    return {message: `Succès ! L'utilisateur ${email} est maintenant un concierge.`};
   } catch (error: any) {
     logger.error(`Erreur lors de l'assignation du rôle concierge à ${email}:`, error);
-    if (error.code === 'auth/user-not-found') {
-        throw new HttpsError('not-found', `Aucun utilisateur ne correspond à l'email ${email}.`);
+    if (error.code === "auth/user-not-found") {
+      throw new HttpsError("not-found", `Aucun utilisateur ne correspond à l'email ${email}.`);
     }
-    throw new HttpsError('internal', "Une erreur interne s'est produite lors de l'assignation du rôle.");
+    throw new HttpsError("internal", "Une erreur interne s'est produite lors de l'assignation du rôle.");
   }
 });
 
+/**
+ * Permet à un concierge ou admin d'ajouter un nouveau partenaire.
+ */
+export const createPartner = onCall(async (request) => {
+  // 1. Vérifier que l'appelant est authentifié
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Vous devez être authentifié pour effectuer cette action.");
+  }
+
+  // 2. Vérifier que l'appelant a les droits (admin ou concierge)
+  const callerClaims = request.auth.token;
+  if (callerClaims.role !== "admin" && callerClaims.role !== "concierge") {
+    logger.warn(`L'utilisateur ${request.auth.uid} a tenté de créer un partenaire sans autorisation.`);
+    throw new HttpsError("permission-denied", "Seul un administrateur ou un concierge peut ajouter un partenaire.");
+  }
+
+  // 3. Valider les données d'entrée
+  const {name, description, servicePillar} = request.data;
+  if (!name || typeof name !== "string" || name.trim() === "") {
+    throw new HttpsError("invalid-argument", "Le nom du partenaire est obligatoire.");
+  }
+  
+  if (!servicePillar || !SERVICE_PILLARS.includes(servicePillar)) {
+    throw new HttpsError("invalid-argument", "Le pilier de service fourni est invalide.");
+  }
+
+  logger.info(`L'utilisateur ${request.auth.uid} (${callerClaims.role}) ajoute le partenaire : ${name}`);
+
+  try {
+    // 4. Préparer et enregistrer les données
+    const newPartnerData = {
+      name: name,
+      description: description,
+      servicePillar: servicePillar,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      addedBy: request.auth.uid,
+    };
+
+    const docRef = await db.collection("partners").add(newPartnerData);
+
+    logger.info(`Partenaire ${name} ajouté avec succès avec l'ID: ${docRef.id}.`);
+    return {success: true, partnerId: docRef.id};
+  } catch (error) {
+    logger.error(`Erreur lors de la création du partenaire ${name}:`, error);
+    throw new HttpsError("internal", "Une erreur interne s'est produite lors de la création du partenaire.");
+  }
+});
+
+/**
+ * Permet à un concierge ou admin de mettre à jour un partenaire existant.
+ */
+export const updatePartner = onCall(async (request) => {
+  // 3a. Vérification de l'authentification et du rôle
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Vous devez être authentifié pour effectuer cette action.");
+  }
+  const callerClaims = request.auth.token;
+  if (callerClaims.role !== "admin" && callerClaims.role !== "concierge") {
+    logger.warn(`L'utilisateur ${request.auth.uid} a tenté de modifier un partenaire sans autorisation.`);
+    throw new HttpsError("permission-denied", "Seul un administrateur ou un concierge peut modifier un partenaire.");
+  }
+
+  // 3b. Validation de l'ID du partenaire
+  const {partnerId, updatedData} = request.data;
+  if (!partnerId || typeof partnerId !== "string") {
+    throw new HttpsError("invalid-argument", "L'ID du partenaire est manquant ou invalide.");
+  }
+
+  // 3c. Validation des données de mise à jour
+  if (!updatedData || typeof updatedData !== "object") {
+    throw new HttpsError("invalid-argument", "Les données de mise à jour sont requises.");
+  }
+  if (updatedData.name !== undefined && (typeof updatedData.name !== "string" || updatedData.name.trim() === "")) {
+    throw new HttpsError("invalid-argument", "Le nom du partenaire ne peut pas être vide.");
+  }
+  if (updatedData.servicePillar !== undefined && !SERVICE_PILLARS.includes(updatedData.servicePillar)) {
+    throw new HttpsError("invalid-argument", "Le pilier de service fourni est invalide.");
+  }
+
+  // Nettoyer les données pour n'envoyer que les champs autorisés
+  const allowedFields = ["name", "description", "servicePillar"];
+  const cleanData: {[key: string]: any} = {};
+  for (const field of allowedFields) {
+    if (updatedData[field] !== undefined) {
+      cleanData[field] = updatedData[field];
+    }
+  }
+  if (Object.keys(cleanData).length === 0) {
+      throw new HttpsError("invalid-argument", "Aucune donnée de mise à jour valide n'a été fournie.");
+  }
+  cleanData.lastUpdatedAt = admin.firestore.FieldValue.serverTimestamp(); // Ajouter un timestamp de mise à jour
+  
+  logger.info(`Tentative de mise à jour du partenaire ${partnerId} par ${request.auth.uid} (${callerClaims.role}) avec les données :`, cleanData);
+
+  try {
+    // 4. Mettre à jour le document dans Firestore
+    const partnerRef = db.collection("partners").doc(partnerId);
+    await partnerRef.update(cleanData);
+
+    // 5. Loguer la modification
+    logger.info(`Le partenaire ${partnerId} a été modifié avec succès par le concierge ${request.auth.uid}.`);
+
+    // 6. Retourner un message de succès
+    return {success: true, message: "Partenaire mis à jour avec succès."};
+  } catch (error: any) {
+    logger.error(`Erreur lors de la mise à jour du partenaire ${partnerId}:`, error);
+    if (error.code === "not-found") {
+        throw new HttpsError("not-found", `Le partenaire avec l'ID ${partnerId} n'a pas été trouvé.`);
+    }
+    throw new HttpsError("internal", "Une erreur interne s'est produite lors de la mise à jour du partenaire.");
+  }
+});
+
+/**
+ * Permet à un concierge ou admin de supprimer un partenaire.
+ */
+export const deletePartner = onCall(async (request) => {
+  // 3. Sécurité : Vérification de l'authentification et du rôle
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Vous devez être authentifié pour effectuer cette action.");
+  }
+  const callerClaims = request.auth.token;
+  if (callerClaims.role !== "admin" && callerClaims.role !== "concierge") {
+    logger.warn(`L'utilisateur ${request.auth.uid} a tenté de supprimer un partenaire sans autorisation.`);
+    throw new HttpsError("permission-denied", "Seul un administrateur ou un concierge peut supprimer un partenaire.");
+  }
+
+  // 2. Validation de l'ID du partenaire
+  const {partnerId} = request.data;
+  if (!partnerId || typeof partnerId !== "string") {
+    throw new HttpsError("invalid-argument", "L'ID du partenaire est manquant ou invalide.");
+  }
+
+  logger.info(`Tentative de suppression du partenaire ${partnerId} par ${request.auth.uid} (${callerClaims.role}).`);
+
+  try {
+    // 4. Logique de suppression
+    const partnerRef = db.collection("partners").doc(partnerId);
+    await partnerRef.delete();
+
+    logger.info(`Le partenaire ${partnerId} a été supprimé avec succès par ${request.auth.uid}.`);
+    
+    // 5. Retourner un message de succès
+    return {success: true, message: "Partenaire supprimé avec succès."};
+  } catch (error) {
+    logger.error(`Erreur lors de la suppression du partenaire ${partnerId}:`, error);
+    // Le SDK admin ne retourne pas une erreur "not-found" spécifique sur .delete()
+    // La suppression d'un document inexistant ne lève pas d'erreur.
+    // Cette approche est idempotente et généralement acceptable.
+    throw new HttpsError("internal", "Une erreur interne s'est produite lors de la suppression du partenaire.");
+  }
+});

@@ -1,25 +1,16 @@
-
 "use client";
 
-import { useState, useEffect } from "react";
-import { db } from "@/lib/firebase";
+import React, { useState } from 'react';
+import { useCollection } from 'react-firebase-hooks/firestore';
+import { collection } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import {
-  collection,
-  onSnapshot,
-  doc,
-  deleteDoc,
-  Unsubscribe,
-} from "firebase/firestore";
-import { Partner } from "@/types/partner";
-
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -28,174 +19,131 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { PartnerForm } from "@/components/partner-form";
-import { useToast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { PartnerForm } from '@/components/partner-form';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertCircle, Pencil } from 'lucide-react';
 
+// Définition d'un type pour les données d'un partenaire pour la sécurité de type
+interface Partner {
+  id: string;
+  name: string;
+  description: string;
+  servicePillar: string;
+}
 
+/**
+ * Gère l'affichage, l'ajout et la modification des partenaires.
+ * Contient la liste des partenaires et la modale du formulaire.
+ */
 export function PartnerManagement() {
-  const { toast } = useToast();
-  const [partners, setPartners] = useState<Partner[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
+  const partnersCollectionRef = collection(db, 'partners');
+  const [partnersSnapshot, loading, error] = useCollection(partnersCollectionRef);
 
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  // 1. État pour stocker les données du partenaire en cours de modification.
+  const [editingPartner, setEditingPartner] = useState<Partner | null>(null);
 
-  useEffect(() => {
-    
-      const partnersQuery = collection(db, "partners");
-      const unsubscribePartners = onSnapshot(partnersQuery, (snapshot) => {
-        const partnersData = snapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() } as Partner)
-        );
-        setPartners(partnersData);
-        setLoading(false);
-      });
-    
-    return () => {
-      if (unsubscribePartners) unsubscribePartners();
-    };
-  }, []);
-
-  const handleDelete = async (partnerId: string) => {
-    try {
-      await deleteDoc(doc(db, "partners", partnerId));
-      toast({
-        title: "Partenaire supprimé",
-        description: "Le partenaire a été retiré de la base de données.",
-      });
-    } catch (error) {
-      toast({
-        title: "Erreur",
-        description: "Impossible de supprimer le partenaire.",
-        variant: "destructive",
-      });
-    }
+  /**
+   * Ouvre la modale pour la création d'un nouveau partenaire.
+   * Réinitialise l'état du partenaire à modifier.
+   */
+  const handleAddNew = () => {
+    setEditingPartner(null);
+    setIsModalOpen(true);
   };
 
-  const handleEdit = (partner: Partner) => {
-    setSelectedPartner(partner);
-    setIsFormOpen(true);
+  /**
+   * 2. & 3. Ouvre la modale pour la modification d'un partenaire existant.
+   * Met à jour l'état avec les données du partenaire sélectionné.
+   */
+  const handleEditClick = (partner: Partner) => {
+    setEditingPartner(partner);
+    setIsModalOpen(true);
   };
 
-  const handleAdd = () => {
-    setSelectedPartner(null);
-    setIsFormOpen(true);
+  /**
+   * Ferme la modale et réinitialise l'état.
+   */
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingPartner(null);
   };
+
+  if (loading) {
+    // Squelette de chargement...
+    return (
+        <div className="border rounded-lg p-4">
+            <Table><TableHeader><TableRow><TableHead>Nom</TableHead><TableHead>Pilier</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>
+            {Array.from({ length: 3 }).map((_, i) => (<TableRow key={i}><TableCell><Skeleton className="h-6 w-32" /></TableCell><TableCell><Skeleton className="h-6 w-40" /></TableCell><TableCell className="text-right"><Skeleton className="h-8 w-8 inline-block" /></TableCell></TableRow>))}
+            </TableBody></Table>
+        </div>
+    )
+  }
+
+  if (error) {
+    console.error("Erreur de chargement des partenaires depuis Firestore:", error);
+    return <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Erreur</AlertTitle><AlertDescription>Impossible de charger les données des partenaires.</AlertDescription></Alert>;
+  }
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
-            Gestion des Partenaires
-          </h1>
-          <p className="text-lg text-muted-foreground">
-            Ajoutez, modifiez ou supprimez les partenaires de confiance.
-          </p>
-        </div>
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button size="lg" onClick={handleAdd}>
-              <PlusCircle className="mr-2" />
-              Ajouter un partenaire
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
-            <DialogHeader>
-              <DialogTitle>
-                {selectedPartner ? "Modifier le partenaire" : "Ajouter un nouveau partenaire"}
-              </DialogTitle>
-            </DialogHeader>
-            <PartnerForm
-              partner={selectedPartner}
-              onSuccess={() => setIsFormOpen(false)}
-            />
-          </DialogContent>
-        </Dialog>
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-semibold">Liste des partenaires</h2>
+        <Button onClick={handleAddNew}>
+          Ajouter un partenaire
+        </Button>
       </div>
 
-      <Card>
-        <CardContent className="mt-6">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nom du Partenaire</TableHead>
-                <TableHead>Pilier de Service</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {partners.length > 0 ? (
-                partners.map((partner) => (
-                  <TableRow key={partner.id}>
-                    <TableCell className="font-medium">{partner.name}</TableCell>
-                    <TableCell>{partner.servicePillar}</TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      {partner.description}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(partner)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                             <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Cette action est irréversible et supprimera définitivement le partenaire &quot;{partner.name}&quot;.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Annuler</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(partner.id)} className="bg-destructive hover:bg-destructive/90">
-                              Supprimer
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={4} className="h-24 text-center">
-                    Aucun partenaire trouvé.
+      <div className="border rounded-lg">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nom du partenaire</TableHead>
+              <TableHead>Pilier de service</TableHead>
+              <TableHead className="text-right">Modifier</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {partnersSnapshot?.docs.map((doc) => {
+              const partner = { id: doc.id, ...doc.data() } as Partner;
+              return (
+                <TableRow key={partner.id}>
+                  <TableCell className="font-medium">{partner.name}</TableCell>
+                  <TableCell>{partner.servicePillar}</TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="outline" size="icon" onClick={() => handleEditClick(partner)}>
+                      <Pencil className="h-4 w-4" />
+                      <span className="sr-only">Modifier {partner.name}</span>
+                    </Button>
                   </TableCell>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="sm:max-w-[450px]" onInteractOutside={handleCloseModal}>
+          <DialogHeader>
+            <DialogTitle>
+              {editingPartner ? 'Modifier le partenaire' : 'Ajouter un nouveau partenaire'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingPartner ? "Mettez à jour les informations ci-dessous." : "Remplissez le formulaire pour créer un nouveau partenaire."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {/* 4. Le formulaire reçoit les données via la prop initialData */}
+            <PartnerForm 
+              onClose={handleCloseModal} 
+              initialData={editingPartner} 
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
