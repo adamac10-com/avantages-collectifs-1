@@ -2,11 +2,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Les utilisateurs authentifiés peuvent lire les partenaires,
-    // mais les écritures ne sont gérées que côté serveur (via Cloud Functions).
+    // Règle pour la collection 'partners'
+    // Objectif : Permettre la lecture à tous les utilisateurs authentifiés,
+    // et interdire toutes les écritures (création, mise à jour, suppression) depuis le client.
     match /partners/{partnerId} {
+      // Tout utilisateur authentifié peut lire les documents de cette collection.
       allow read: if request.auth != null;
-      // L'absence de "allow write" interdit les créations, mises à jour et suppressions côté client.
+
+      // Interdit explicitement toutes les opérations d'écriture (create, update, delete)
+      // depuis le client. Ces opérations doivent passer par un backend sécurisé (Cloud Functions).
+      allow write: if false;
     }
 
     // Les utilisateurs connectés peuvent lire la liste des récompenses.
