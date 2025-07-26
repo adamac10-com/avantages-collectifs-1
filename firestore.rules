@@ -2,10 +2,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Règle pour la collection des partenaires
-    // La lecture est publique pour permettre le rendu côté serveur (SSR).
+    // Les utilisateurs authentifiés peuvent lire les partenaires,
+    // mais les écritures ne sont gérées que côté serveur (via Cloud Functions).
     match /partners/{partnerId} {
-      allow read: if true;
+      allow read: if request.auth != null;
+      // L'absence de "allow write" interdit les créations, mises à jour et suppressions côté client.
     }
 
     // Les utilisateurs connectés peuvent lire la liste des récompenses.
@@ -16,7 +17,6 @@ service cloud.firestore {
     // Un utilisateur peut lire son propre historique de transactions.
     match /transactions/{transactionId} {
       allow read: if request.auth.uid == resource.data.userId;
-      allow create: if request.auth.uid == request.resource.data.userId;
     }
 
     // Seuls les concierges (rôle à définir) peuvent lire toutes les demandes.
