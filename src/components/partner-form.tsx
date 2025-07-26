@@ -5,15 +5,15 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/firebase";
-import { collection, addDoc, doc, setDoc } from "firebase/firestore";
+import { db, firebaseApp } from "@/lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { Partner } from "@/types/partner";
 
 import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -57,6 +57,8 @@ interface PartnerFormProps {
 export function PartnerForm({ partner, onSuccess }: PartnerFormProps) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const functions = getFunctions(firebaseApp);
+  const createPartner = httpsCallable(functions, 'createPartner');
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -71,7 +73,7 @@ export function PartnerForm({ partner, onSuccess }: PartnerFormProps) {
     setIsLoading(true);
     try {
       if (partner) {
-        // Update existing partner
+        // UPDATE: Mettre à jour un partenaire existant
         const partnerRef = doc(db, "partners", partner.id);
         await setDoc(partnerRef, values, { merge: true });
         toast({
@@ -79,19 +81,19 @@ export function PartnerForm({ partner, onSuccess }: PartnerFormProps) {
           description: "Les informations du partenaire ont été modifiées.",
         });
       } else {
-        // Create new partner
-        await addDoc(collection(db, "partners"), values);
+        // CREATE: Appeler la Cloud Function pour créer un nouveau partenaire
+        await createPartner(values);
         toast({
           title: "Partenaire ajouté",
           description: "Le nouveau partenaire a été créé avec succès.",
         });
       }
-      onSuccess();
-    } catch (error) {
-      console.error("Error saving partner: ", error);
+      onSuccess(); // Ferme la modale/dialogue
+    } catch (error: any) {
+      console.error("Erreur lors de la sauvegarde du partenaire: ", error);
       toast({
         title: "Erreur",
-        description: "Une erreur est survenue lors de l'enregistrement.",
+        description: error.message || "Une erreur est survenue lors de l'enregistrement.",
         variant: "destructive",
       });
     } finally {
