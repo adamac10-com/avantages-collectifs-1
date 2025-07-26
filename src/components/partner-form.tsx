@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,14 +13,16 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from "@/hooks/use-toast";
 import { firebaseApp } from '@/lib/firebase';
+import type { Partner } from './partner-management';
 
 interface PartnerFormProps {
   onClose: () => void;
+  initialData?: Partner | null;
 }
 
-// Définition des options pour le menu déroulant
 const servicePillars = [
   'Protection & Assurance', 
   'Habitat & Rénovation', 
@@ -27,7 +30,7 @@ const servicePillars = [
   'Loisirs & Voyages'
 ];
 
-export function PartnerForm({ onClose }: PartnerFormProps) {
+export function PartnerForm({ onClose, initialData }: PartnerFormProps) {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -36,12 +39,24 @@ export function PartnerForm({ onClose }: PartnerFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        name: initialData.name,
+        description: initialData.description,
+        servicePillar: initialData.servicePillar,
+      });
+    } else {
+        setFormData({ name: '', description: '', servicePillar: '' });
+    }
+  }, [initialData]);
+
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prevData => ({ ...prevData, [name]: value }));
   };
   
-  // Handler spécifique pour le changement de valeur du Select
   const handleSelectChange = (value: string) => {
     setFormData(prevData => ({ ...prevData, servicePillar: value }));
   };
@@ -50,7 +65,6 @@ export function PartnerForm({ onClose }: PartnerFormProps) {
     e.preventDefault();
     if (isLoading) return;
 
-    // Vérification que le pilier de service a bien été sélectionné
     if (!formData.servicePillar) {
         toast({
             title: "Champ requis",
@@ -64,21 +78,31 @@ export function PartnerForm({ onClose }: PartnerFormProps) {
 
     try {
       const functions = getFunctions(firebaseApp);
-      const createPartner = httpsCallable(functions, 'createPartner');
-      await createPartner(formData);
-
-      toast({
-        title: "Succès",
-        description: "Partenaire ajouté avec succès !",
-      });
-      console.log("Partenaire ajouté avec succès !");
+      
+      if (initialData) {
+        // Mode mise à jour
+        const updatePartner = httpsCallable(functions, 'updatePartner');
+        await updatePartner({ partnerId: initialData.id, updatedData: formData });
+        toast({
+          title: "Succès",
+          description: "Partenaire mis à jour avec succès !",
+        });
+      } else {
+        // Mode création
+        const createPartner = httpsCallable(functions, 'createPartner');
+        await createPartner(formData);
+        toast({
+          title: "Succès",
+          description: "Partenaire ajouté avec succès !",
+        });
+      }
       onClose();
 
-    } catch (error) {
-      console.error("Erreur détaillée lors de l'ajout du partenaire:", error);
+    } catch (error: any) {
+      console.error("Erreur détaillée lors de la soumission:", error);
       toast({
         title: "Erreur",
-        description: "Une erreur est survenue lors de l'ajout du partenaire.",
+        description: error.message || "Une erreur est survenue.",
         variant: "destructive",
       });
     } finally {
@@ -95,31 +119,32 @@ export function PartnerForm({ onClose }: PartnerFormProps) {
           name="name"
           value={formData.name}
           onChange={handleChange}
-          placeholder="Ex: Boulangerie Paul"
+          placeholder="Ex: Entreprise de Rénovation ABC"
           required
+          style={{ minHeight: '48px' }}
         />
       </div>
       <div className="space-y-2">
         <Label htmlFor="description">Description</Label>
-        <Input
+        <Textarea
           id="description"
           name="description"
           value={formData.description}
           onChange={handleChange}
-          placeholder="Offre des réductions sur les viennoiseries"
+          placeholder="Offre des services de rénovation complets pour la maison."
           required
+          className="min-h-[100px]"
         />
       </div>
       
-      {/* --- Bloc de code mis à jour pour le champ "Pilier de service" --- */}
       <div className="space-y-2">
         <Label htmlFor="servicePillar">Pilier de service</Label>
         <Select 
             onValueChange={handleSelectChange} 
-            defaultValue={formData.servicePillar}
+            value={formData.servicePillar}
             required
         >
-          <SelectTrigger id="servicePillar">
+          <SelectTrigger id="servicePillar" style={{ minHeight: '48px' }}>
             <SelectValue placeholder="Sélectionnez un pilier" />
           </SelectTrigger>
           <SelectContent>
@@ -131,14 +156,13 @@ export function PartnerForm({ onClose }: PartnerFormProps) {
           </SelectContent>
         </Select>
       </div>
-      {/* --- Fin du bloc de code mis à jour --- */}
 
       <div className="flex justify-end space-x-2 pt-4">
-        <Button type="button" variant="outline" onClick={onClose} disabled={isLoading}>
+        <Button type="button" variant="outline" onClick={onClose} disabled={isLoading} style={{ minHeight: '48px' }}>
           Annuler
         </Button>
-        <Button type="submit" disabled={isLoading}>
-          {isLoading ? 'Ajout en cours...' : 'Ajouter le partenaire'}
+        <Button type="submit" disabled={isLoading} style={{ minHeight: '48px' }}>
+          {isLoading ? 'Enregistrement...' : (initialData ? 'Mettre à jour' : 'Ajouter le partenaire')}
         </Button>
       </div>
     </form>
