@@ -10,7 +10,6 @@ import {
   deleteDoc,
   Unsubscribe,
 } from "firebase/firestore";
-import { useAuth } from "@/hooks/useAuth";
 import { Partner } from "@/types/partner";
 
 import { Button } from "@/components/ui/button";
@@ -47,56 +46,34 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Skeleton } from "@/components/ui/skeleton";
 import { PartnerForm } from "@/components/partner-form";
 import { useToast } from "@/hooks/use-toast";
-import { PlusCircle, Edit, Trash2, ShieldQuestion } from "lucide-react";
+import { PlusCircle, Edit, Trash2 } from "lucide-react";
 
-interface UserData {
-  role?: string;
-}
 
 export function PartnerManagement() {
-  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [partners, setPartners] = useState<Partner[]>([]);
-  const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
 
-  const isConcierge = userData?.role === "concierge";
 
   useEffect(() => {
-    let unsubscribePartners: Unsubscribe | undefined;
-    let unsubscribeUser: Unsubscribe | undefined;
-
-    if (user) {
-      // Fetch user role
-      const userDocRef = doc(db, "users", user.uid);
-      unsubscribeUser = onSnapshot(userDocRef, (doc) => {
-        setUserData(doc.data() as UserData);
-        // We can set loading to false after we know the user's role
-        setLoading(authLoading);
-      });
-
-      // Fetch partners
+    
       const partnersQuery = collection(db, "partners");
-      unsubscribePartners = onSnapshot(partnersQuery, (snapshot) => {
+      const unsubscribePartners = onSnapshot(partnersQuery, (snapshot) => {
         const partnersData = snapshot.docs.map(
           (doc) => ({ id: doc.id, ...doc.data() } as Partner)
         );
         setPartners(partnersData);
+        setLoading(false);
       });
-    } else if (!authLoading) {
-      setLoading(false);
-    }
-
+    
     return () => {
       if (unsubscribePartners) unsubscribePartners();
-      if (unsubscribeUser) unsubscribeUser();
     };
-  }, [user, authLoading]);
+  }, []);
 
   const handleDelete = async (partnerId: string) => {
     try {
@@ -123,36 +100,6 @@ export function PartnerManagement() {
     setSelectedPartner(null);
     setIsFormOpen(true);
   };
-
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-8 w-64" />
-        <Card>
-          <CardContent className="p-6">
-            <Skeleton className="h-64 w-full" />
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (!isConcierge) {
-    return (
-      <Card className="text-center">
-        <CardHeader>
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
-            <ShieldQuestion className="h-8 w-8 text-destructive" />
-          </div>
-          <CardTitle className="mt-4 text-2xl">Accès non autorisé</CardTitle>
-          <CardDescription>
-            Vous devez avoir le rôle de &quot;Concierge&quot; pour accéder à cette page.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
 
   return (
     <div className="space-y-8">

@@ -1,3 +1,4 @@
+
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
@@ -251,5 +252,54 @@ export const redeemReward = onCall(async request => {
       'internal',
       "Une erreur est survenue lors de l'échange."
     );
+  }
+});
+
+/**
+ * Assigne le rôle "concierge" à un utilisateur via son email.
+ * Doit être appelée par un admin ou un autre concierge.
+ */
+export const setConciergeRole = onCall(async (request) => {
+  // Étape 1: Vérifier que l'appelant est authentifié
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Vous devez être authentifié pour effectuer cette action.');
+  }
+
+  // Étape 2: Vérifier que l'appelant a les droits (admin ou concierge)
+  const callerUid = request.auth.uid;
+  const callerAuth = await admin.auth().getUser(callerUid);
+  const callerClaims = callerAuth.customClaims;
+
+  if (callerClaims?.role !== 'admin' && callerClaims?.role !== 'concierge') {
+      logger.warn(`L'utilisateur ${callerUid} a tenté d'assigner un rôle sans autorisation.`);
+      throw new HttpsError('permission-denied', 'Seul un administrateur ou un concierge peut assigner des rôles.');
+  }
+
+  // Étape 3: Valider les données d'entrée
+  const email = request.data.email;
+  if (!email || typeof email !== 'string') {
+    throw new HttpsError('invalid-argument', "L'e-mail est manquant ou invalide.");
+  }
+  
+  logger.info(`L'utilisateur ${callerUid} (${callerClaims.role}) tente de promouvoir ${email} au rang de concierge.`);
+
+  try {
+    // Étape 4: Trouver l'utilisateur cible par email
+    const userToPromote = await admin.auth().getUserByEmail(email);
+
+    // Étape 5: Assigner le custom claim
+    await admin.auth().setCustomUserClaims(userToPromote.uid, { role: 'concierge' });
+    
+    // Étape 6: Mettre aussi à jour le rôle dans Firestore pour un accès facile côté client
+    await db.collection('users').doc(userToPromote.uid).set({ role: 'concierge' }, { merge: true });
+
+    logger.info(`Succès ! L'utilisateur ${email} (UID: ${userToPromote.uid}) est maintenant un concierge.`);
+    return { message: `Succès ! L'utilisateur ${email} est maintenant un concierge.` };
+  } catch (error: any) {
+    logger.error(`Erreur lors de l'assignation du rôle concierge à ${email}:`, error);
+    if (error.code === 'auth/user-not-found') {
+        throw new HttpsError('not-found', `Aucun utilisateur ne correspond à l'email ${email}.`);
+    }
+    throw new HttpsError('internal', "Une erreur interne s'est produite lors de l'assignation du rôle.");
   }
 });
