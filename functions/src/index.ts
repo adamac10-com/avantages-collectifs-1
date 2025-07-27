@@ -17,34 +17,57 @@ const SERVICE_PILLARS = [
 ];
 
 /**
- * Se déclenche à la création d'un nouvel utilisateur Auth
- * et crée son profil dans la collection 'users' de Firestore.
+ * Finalise l'inscription d'un utilisateur en créant son profil dans Firestore.
+ * Cette fonction est appelée depuis le client après la création de l'utilisateur dans Auth.
  */
-export const createUserProfile = functions.auth.user().onCreate(async (user) => {
-  logger.info(`[createUserProfile] - Début de la création du profil pour l'utilisateur UID : ${user.uid}`);
+export const finalizeRegistration = onCall(async (request) => {
+  // 1. Vérifier que l'utilisateur est authentifié
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "La fonction doit être appelée par un utilisateur authentifié.");
+  }
+
+  // 2. Valider les données d'entrée
+  const { firstName, lastName, nickname } = request.data;
+  if (!firstName || !lastName || !nickname) {
+    throw new HttpsError("invalid-argument", "Les informations 'firstName', 'lastName' et 'nickname' sont requises.");
+  }
+
+  const user = request.auth;
+  const { uid, email } = user;
+
+  logger.info(`[finalizeRegistration] - Début de la finalisation du profil pour l'UID : ${uid}`);
 
   const newUserProfile = {
-    uid: user.uid,
-    email: user.email || "",
-    displayName: user.displayName || "Nouveau Membre",
-    photoURL: user.photoURL || null,
+    uid,
+    email: email || "",
+    firstName,
+    lastName,
+    nickname, // Ce champ est aussi le `displayName` dans Auth
+    displayName: nickname, // Maintenir la cohérence
+    photoURL: user.token.picture || null,
     membershipLevel: "essentiel",
     loyaltyPoints: 0,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    role: "member", // Assign default role
+    role: "member", // Rôle par défaut
   };
 
   try {
-    await db.collection("users").doc(user.uid).set(newUserProfile);
-    logger.info(`[createUserProfile] - Profil créé avec succès dans Firestore pour l'utilisateur UID : ${user.uid}`);
+    await db.collection("users").doc(uid).set(newUserProfile);
+    logger.info(`[finalizeRegistration] - Profil créé avec succès dans Firestore pour l'UID : ${uid}`);
+    
+    // Mettre à jour les custom claims de l'utilisateur pour inclure le rôle
+    await admin.auth().setCustomUserClaims(uid, { role: 'member' });
+    
+    return { success: true, message: "Profil utilisateur créé avec succès." };
   } catch (error) {
-    logger.error(`[createUserProfile] - Erreur lors de la création du profil pour l'UID ${user.uid}:`, error);
-    throw new functions.https.HttpsError(
+    logger.error(`[finalizeRegistration] - Erreur lors de la création du profil pour l'UID ${uid}:`, error);
+    throw new HttpsError(
       "internal",
       "Une erreur est survenue lors de la création du profil utilisateur."
     );
   }
 });
+
 
 /**
  * Permet à un concierge de valider une demande de service,
@@ -395,15 +418,18 @@ export const deletePartner = onCall(async (request) => {
 
 /**
  * Permet à un membre authentifié de créer une nouvelle discussion dans le forum.
+ * **CORRIGÉ** : Utilise le token pour le nom de l'auteur au lieu d'une lecture Firestore.
  */
 export const createCommunityPost = onCall(async (request) => {
-  // 3a. Vérifier que l'appelant est authentifié
+  // 1. Vérifier que l'appelant est authentifié
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Vous devez être connecté pour créer une discussion.");
   }
   const authorId = request.auth.uid;
+  // 2. Récupérer le nom de l'auteur depuis le token (plus efficace)
+  const authorName = request.auth.token.name || "Membre Anonyme";
 
-  // 3b. Valider les données d'entrée
+  // 3. Valider les données d'entrée
   const {title, content} = request.data;
   if (!title || typeof title !== "string" || title.trim().length === 0) {
     throw new HttpsError("invalid-argument", "Le titre est obligatoire.");
@@ -412,25 +438,15 @@ export const createCommunityPost = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "Le contenu ne peut pas être vide.");
   }
 
-  logger.info(`L'utilisateur ${authorId} crée une nouvelle discussion: "${title}"`);
+  logger.info(`L'utilisateur ${authorId} (${authorName}) crée une nouvelle discussion: "${title}"`);
 
   try {
-    // 4. Récupérer les informations de l'auteur depuis Firestore
-    const userRef = db.collection("users").doc(authorId);
-    const userDoc = await userRef.get();
-
-    if (!userDoc.exists) {
-      throw new HttpsError("not-found", "Profil utilisateur introuvable.");
-    }
-
-    const authorName = userDoc.data()?.nickname || "Membre Anonyme";
-
-    // 5. Préparer et créer le nouveau document de post
+    // 4. Préparer et créer le nouveau document de post
     const newPost = {
       title,
       content,
       authorId,
-      authorName,
+      authorName, // Utilisation du nom du token
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       commentsCount: 0,
       lastCommentAt: null,
@@ -439,7 +455,7 @@ export const createCommunityPost = onCall(async (request) => {
     const postRef = await db.collection("community_posts").add(newPost);
     logger.info(`Discussion "${title}" créée avec succès avec l'ID: ${postRef.id}`);
 
-    // 6. Retourner un message de succès avec l'ID du post
+    // 5. Retourner un message de succès avec l'ID du post
     return {success: true, postId: postRef.id, message: "Discussion créée avec succès !"};
   } catch (error) {
     logger.error(`Erreur lors de la création de la discussion par ${authorId}:`, error);
@@ -449,6 +465,7 @@ export const createCommunityPost = onCall(async (request) => {
     throw new HttpsError("internal", "Une erreur interne est survenue lors de la création de la discussion.");
   }
 });
+
 
 /**
  * Attribue des points de fidélité à un utilisateur lorsqu'il crée une nouvelle discussion.
@@ -496,6 +513,7 @@ export const awardPointsForNewPost = functions.firestore
 
 /**
  * Permet à un membre authentifié d'ajouter un commentaire à une discussion.
+ * **CORRIGÉ** : Utilise le token pour le nom et l'avatar de l'auteur.
  */
 export const addCommentToPost = onCall(async (request) => {
   // 1. Vérifier que l'utilisateur est authentifié
@@ -513,41 +531,35 @@ export const addCommentToPost = onCall(async (request) => {
   }
 
   const authorId = request.auth.uid;
+  // 3. Récupérer les informations de l'auteur depuis le token
+  const authorName = request.auth.token.name || "Membre Anonyme";
   const authorAvatar = request.auth.token.picture || null;
 
-  logger.info(`L'utilisateur ${authorId} ajoute un commentaire au post ${postId}.`);
+  logger.info(`L'utilisateur ${authorId} (${authorName}) ajoute un commentaire au post ${postId}.`);
+
+  const postRef = db.collection("community_posts").doc(postId);
+  const commentsCollectionRef = postRef.collection("comments");
 
   try {
-    const postRef = db.collection("community_posts").doc(postId);
-    const commentsCollectionRef = postRef.collection("comments");
-    const userRef = db.collection("users").doc(authorId);
-
-    // 3. Utiliser une transaction pour garantir l'atomicité
+    // 4. Utiliser une transaction pour garantir l'atomicité
     await db.runTransaction(async (transaction) => {
-      // Étape cruciale : lire le profil de l'utilisateur pour obtenir son surnom
-      const userDoc = await transaction.get(userRef);
-      if (!userDoc.exists) {
-        throw new HttpsError("not-found", "Profil utilisateur introuvable pour récupérer le surnom.");
-      }
-      const authorName = userDoc.data()?.nickname || "Membre Anonyme";
-
-      // Optionnel mais recommandé : vérifier que le post existe avant de commenter
+      // Vérifier que le post existe avant de commenter
       const postDoc = await transaction.get(postRef);
       if (!postDoc.exists) {
         throw new HttpsError("not-found", "La discussion à laquelle vous essayez de répondre n'existe pas.");
       }
 
       // Ajouter le nouveau commentaire
-      const newCommentRef = commentsCollectionRef.doc(); // Crée une nouvelle référence de document
+      const newCommentRef = commentsCollectionRef.doc();
       transaction.set(newCommentRef, {
-        content: content,
-        authorId: authorId,
-        authorName: authorName,
-        authorAvatar: authorAvatar,
+        content,
+        authorId,
+        authorName, // Utilisation du nom du token
+        authorAvatar, // Utilisation de l'avatar du token
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      // Mettre à jour le compteur de commentaires et la date du dernier commentaire sur le post parent
+      // Mettre à jour le compteur et la date du dernier commentaire sur le post parent
       transaction.update(postRef, {
         commentsCount: admin.firestore.FieldValue.increment(1),
         lastCommentAt: admin.firestore.FieldValue.serverTimestamp(),

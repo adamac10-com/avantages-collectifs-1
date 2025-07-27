@@ -43,6 +43,7 @@ interface Transaction {
 interface Reward {
     id: string;
     title: string;
+    description: string; // Ajout de la description
     pointsCost: number;
     requiredLevel: 'essentiel' | 'privilege';
 }
@@ -93,7 +94,6 @@ export function RewardsPage() {
         (doc) => ({ id: doc.id, ...doc.data() } as Transaction)
       );
       setTransactions(newTransactions);
-      setLoading(false);
     });
 
     // Fetch Rewards
@@ -110,6 +110,8 @@ export function RewardsPage() {
                 description: "Impossible de charger le catalogue des récompenses.",
                 variant: "destructive"
             });
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -150,7 +152,7 @@ export function RewardsPage() {
   }) : [];
 
 
-  if (loading) {
+  if (loading && !userData) { // Montre le squelette uniquement au chargement initial
     return (
         <div className="space-y-8">
             <Skeleton className="h-10 w-1/3" />
@@ -193,7 +195,7 @@ export function RewardsPage() {
         </CardHeader>
         <CardContent>
             <p className="text-6xl font-bold">
-                {userData?.loyaltyPoints.toLocaleString("fr-FR") ?? 0}
+                {userData?.loyaltyPoints?.toLocaleString("fr-FR") ?? 0}
             </p>
             <p className="text-primary-foreground/80 mt-1">points</p>
         </CardContent>
@@ -244,17 +246,18 @@ export function RewardsPage() {
                 <Card key={reward.id} className="flex flex-col">
                     <CardHeader>
                         <CardTitle>{reward.title}</CardTitle>
-                        <CardDescription className="flex items-center gap-2 pt-2 font-semibold text-accent text-lg">
-                           <Coins />
-                           {reward.pointsCost.toLocaleString("fr-FR")} points
+                        <CardDescription className="pt-2">
+                            {reward.description}
                         </CardDescription>
-                         {reward.requiredLevel === 'privilege' && (
-                          <Badge variant="outline" className="mt-2 w-fit border-accent text-accent">Exclusivité Privilège</Badge>
-                        )}
                     </CardHeader>
-                    <CardContent className="flex-grow">
+                    <CardContent className="flex-grow flex items-center gap-2 font-semibold text-accent text-lg">
+                       <Coins />
+                       {reward.pointsCost.toLocaleString("fr-FR")} points
                     </CardContent>
-                    <CardFooter>
+                    <CardFooter className="flex flex-col items-start gap-4">
+                        {reward.requiredLevel === 'privilege' && (
+                          <Badge variant="outline" className="w-fit border-accent text-accent">Exclusivité Privilège</Badge>
+                        )}
                          <Button 
                             className="w-full min-h-[48px]"
                             disabled={!userData || userData.loyaltyPoints < reward.pointsCost || redeemingStates[reward.id]}
