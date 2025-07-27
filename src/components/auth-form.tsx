@@ -1,37 +1,4 @@
-Agis en tant qu'ingénieur logiciel full-stack senior, expert en React, Next.js, TypeScript et Firebase. Tu es méticuleux, tu écris du code propre et tu portes une attention particulière à la gestion de l'état et au flux de données entre les composants.
 
-**Contexte :**
-Nous devons faire une refonte majeure de notre processus d'inscription et de la création de posts sur le forum pour intégrer les notions de Nom/Prénom (privés) et de Surnom (public).
-
-**Processus Détaillé :**
-
-**Partie 1 : Mettre à jour le formulaire d'inscription (React)**
-1.  Dans le composant du formulaire d'inscription, ajoute trois nouveaux champs `<Input>` obligatoires : `firstName`, `lastName`, et `nickname`.
-2.  Dans la fonction de soumission (`handleSubmit`) :
-    a.  Crée l'utilisateur avec `createUserWithEmailAndPassword`.
-    b.  Immédiatement après, utilise `updateProfile` sur le nouvel utilisateur pour définir son `displayName` avec la valeur du champ `nickname`.
-    c.  Ensuite, appelle une nouvelle Cloud Function `finalizeRegistration` (que nous allons créer) en lui passant un objet `{ firstName, lastName, nickname }`.
-
-**Partie 2 : Créer la nouvelle Cloud Function `finalizeRegistration` (Backend)**
-1.  Dans `functions/src/index.ts`, **supprime l'ancienne fonction `createUserProfile`** qui se déclenchait sur `onCreate`.
-2.  Crée une nouvelle **Cloud Function callable v2** nommée `finalizeRegistration`.
-3.  Elle doit accepter un objet `data` contenant `firstName`, `lastName` et `nickname`.
-4.  Elle doit vérifier que l'appelant est bien authentifié (`context.auth`).
-5.  Elle doit créer un document dans la collection `users` avec l'UID de l'appelant. Ce document doit contenir :
-    * `uid`, `email` (depuis `context.auth.token`)
-    * `firstName`, `lastName`, `nickname` (depuis `data`)
-    * `membershipLevel: "essentiel"`
-    * `loyaltyPoints: 0`
-    * `role: "member"`
-    * `createdAt: admin.firestore.FieldValue.serverTimestamp()`
-
-**Partie 3 : Mettre à jour la Cloud Function `createCommunityPost` (Backend)**
-1.  Dans `functions/src/index.ts`, modifie la fonction `createCommunityPost`.
-2.  Supprime toute la logique qui lit la collection `users`.
-3.  Récupère le Surnom de l'auteur directement depuis le token : `const authorName = context.auth.token.name || 'Membre anonyme';`
-4.  Utilise cette variable `authorName` pour le champ `authorName` du nouveau post.
-
-Génère tous les extraits de code mis à jour : le composant d'inscription React, et les deux Cloud Functions (`finalizeRegistration` et la version corrigée de `createCommunityPost`) pour le fichier `index.ts`.
 "use client";
 
 import { useState } from "react";
