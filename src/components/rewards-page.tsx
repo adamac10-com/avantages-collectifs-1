@@ -126,10 +126,10 @@ export function RewardsPage() {
         setRedeemingStates(prev => ({ ...prev, [rewardId]: false }));
     }
   };
-
+  
   const filteredRewards = useMemo(() => {
     if (!userData || !rewards) {
-      return [];
+      return rewards || [];
     }
     return rewards.filter(reward => {
       if (userData.membershipLevel === 'privilege') {
@@ -138,7 +138,6 @@ export function RewardsPage() {
       return reward.requiredLevel === 'essentiel';
     });
   }, [userData, rewards]);
-
 
   if (loadingInitial) {
     return (
@@ -277,4 +276,3 @@ export function RewardsPage() {
     </div>
   );
 }
- 
