@@ -1,52 +1,24 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Les utilisateurs peuvent lire/modifier leur propre profil, mais pas celui des autres.
-    // La création se fait via une Cloud Function sécurisée.
+    // Allow users to read and update their own profile.
     match /users/{userId} {
       allow read, update: if request.auth != null && request.auth.uid == userId;
-      allow create, delete: if false;
-    }
-
-    // N'importe quel utilisateur authentifié peut lire la liste des partenaires.
-    // L'écriture (create, update, delete) est gérée par les Cloud Functions.
-    match /partners/{partnerId} {
-      allow read: if request.auth != null;
-      allow write: if false;
-    }
-
-    // N'importe quel utilisateur authentifié peut lire les posts du forum.
-    // La création se fait via une Cloud Function.
-    match /community_posts/{postId} {
-      allow read: if request.auth != null;
-      allow write: if false; // Les créations/mises à jour passent par les fonctions
-      
-      // N'importe quel utilisateur authentifié peut lire les commentaires.
-      // L'ajout se fait via une Cloud Function.
-      match /comments/{commentId} {
-        allow read: if request.auth != null;
-        allow write: if false;
-      }
     }
     
-    // Les demandes sont gérées par les concierges via les fonctions.
-    // Seul le membre propriétaire peut créer sa demande (à implémenter côté client).
-    match /conciergeRequests/{requestId} {
-       allow read, update: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'concierge';
-       allow create: if request.auth != null;
-    }
-
-    // Les récompenses sont en lecture seule pour tous. L'échange se fait par fonction.
-    match /rewards/{rewardId} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    // L'historique des transactions d'un utilisateur n'est lisible que par lui-même.
-    match /transactions/{transactionId} {
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow write: if false;
+    // Allow authenticated users to read posts. Create/update/delete are handled by Cloud Functions.
+    match /community_posts/{postId} {
+      allow read: if request.auth != null;
+      
+      // Rules for the comments subcollection
+      match /comments/{commentId} {
+        // Allow any authenticated user to read comments.
+        allow read: if request.auth != null;
+        
+        // Allow a user to create a comment only if they are the author.
+        allow create: if request.auth != null && request.auth.uid == request.resource.data.authorId;
+      }
     }
   }
 }
