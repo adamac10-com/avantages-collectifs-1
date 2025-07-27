@@ -558,3 +558,5 @@ export const addCommentToPost = onCall(async (request) => {
     throw new HttpsError("internal", "Une erreur est survenue lors de l'ajout de votre commentaire.");
   }
 });
+
+    
