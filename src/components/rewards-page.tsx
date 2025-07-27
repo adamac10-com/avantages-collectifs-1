@@ -128,6 +128,7 @@ export function RewardsPage() {
   }
 
   const filteredRewards = useMemo(() => {
+    // Ne filtre que si les deux sources de données sont prêtes
     if (!userData || !rewards) {
       return [];
     }
@@ -209,7 +210,7 @@ export function RewardsPage() {
                     <Card key={reward.id} className="flex flex-col">
                         <CardHeader>
                             <CardTitle>{reward.title}</CardTitle>
-                            <CardDescription className="pt-2">{reward.description}</CardDescription>
+                            <CardDescription className="pt-2">{reward.description}</CardHeader>
                         </CardHeader>
                         <CardContent className="flex-grow flex items-center gap-2 font-semibold text-accent text-lg">
                            <Coins />
