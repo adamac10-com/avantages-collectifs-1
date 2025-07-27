@@ -449,3 +449,46 @@ export const createCommunityPost = onCall(async (request) => {
     throw new HttpsError("internal", "Une erreur interne est survenue lors de la création de la discussion.");
   }
 });
+
+/**
+ * Attribue des points de fidélité à un utilisateur lorsqu'il crée une nouvelle discussion.
+ */
+export const awardPointsForNewPost = functions.firestore
+  .document("community_posts/{postId}")
+  .onCreate(async (snapshot, context) => {
+    const postData = snapshot.data();
+    if (!postData) {
+      logger.error("Aucune donnée trouvée dans le document de post créé:", context.params.postId);
+      return;
+    }
+
+    const authorId = postData.authorId;
+    if (!authorId) {
+      logger.error("Aucun authorId trouvé dans le document de post:", context.params.postId);
+      return;
+    }
+
+    const userRef = db.collection("users").doc(authorId);
+
+    try {
+      // Incrémente de manière atomique les points de l'utilisateur
+      await userRef.update({
+        loyaltyPoints: admin.firestore.FieldValue.increment(10),
+      });
+
+      // Crée également une transaction pour l'historique
+      const transactionRef = db.collection("transactions").doc();
+      await transactionRef.set({
+        userId: authorId,
+        type: "forum_post_reward",
+        points: 10,
+        description: `Récompense pour la discussion : "${postData.title}"`,
+        postId: context.params.postId,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      logger.info(`+10 points attribués à l'utilisateur ${authorId} pour la création du post ${context.params.postId}.`);
+    } catch (error) {
+      logger.error(`Erreur lors de l'attribution des points à ${authorId} pour le post ${context.params.postId}:`, error);
+    }
+  });
