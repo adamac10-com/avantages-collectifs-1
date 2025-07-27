@@ -504,7 +504,7 @@ export const addCommentToPost = onCall(async (request) => {
   }
 
   // 2. Valider les données d'entrée
-  const { postId, content } = request.data;
+  const {postId, content} = request.data;
   if (!postId || typeof postId !== "string") {
     throw new HttpsError("invalid-argument", "L'ID de la discussion est manquant ou invalide.");
   }
@@ -524,39 +524,36 @@ export const addCommentToPost = onCall(async (request) => {
 
     // 3. Utiliser une transaction pour garantir l'atomicité
     await db.runTransaction(async (transaction) => {
-        // Optionnel mais recommandé : vérifier que le post existe avant de commenter
-        const postDoc = await transaction.get(postRef);
-        if (!postDoc.exists) {
-            throw new HttpsError("not-found", "La discussion à laquelle vous essayez de répondre n'existe pas.");
-        }
+      // Optionnel mais recommandé : vérifier que le post existe avant de commenter
+      const postDoc = await transaction.get(postRef);
+      if (!postDoc.exists) {
+        throw new HttpsError("not-found", "La discussion à laquelle vous essayez de répondre n'existe pas.");
+      }
 
-        // Ajouter le nouveau commentaire
-        const newCommentRef = commentsCollectionRef.doc(); // Crée une nouvelle référence de document
-        transaction.set(newCommentRef, {
-            content: content,
-            authorId: authorId,
-            authorName: authorName,
-            authorAvatar: authorAvatar,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+      // Ajouter le nouveau commentaire
+      const newCommentRef = commentsCollectionRef.doc(); // Crée une nouvelle référence de document
+      transaction.set(newCommentRef, {
+        content: content,
+        authorId: authorId,
+        authorName: authorName,
+        authorAvatar: authorAvatar,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
 
-        // Mettre à jour le compteur de commentaires et la date du dernier commentaire sur le post parent
-        transaction.update(postRef, {
-            commentsCount: admin.firestore.FieldValue.increment(1),
-            lastCommentAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+      // Mettre à jour le compteur de commentaires et la date du dernier commentaire sur le post parent
+      transaction.update(postRef, {
+        commentsCount: admin.firestore.FieldValue.increment(1),
+        lastCommentAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
     });
-    
-    logger.info(`Commentaire ajouté avec succès au post ${postId} par ${authorId}.`);
-    return { success: true, message: "Commentaire ajouté avec succès." };
 
+    logger.info(`Commentaire ajouté avec succès au post ${postId} par ${authorId}.`);
+    return {success: true, message: "Commentaire ajouté avec succès."};
   } catch (error) {
     logger.error(`Erreur lors de l'ajout du commentaire par ${authorId} au post ${postId}:`, error);
     if (error instanceof HttpsError) {
-        throw error;
+      throw error;
     }
     throw new HttpsError("internal", "Une erreur est survenue lors de l'ajout de votre commentaire.");
   }
 });
-
-    

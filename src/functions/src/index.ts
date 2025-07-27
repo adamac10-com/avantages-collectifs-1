@@ -418,10 +418,7 @@ export const createCommunityPost = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "Vous devez être connecté pour créer une discussion.");
   }
   const authorId = request.auth.uid;
-  // Utiliser le displayName du token (qui est le nickname)
-  const authorName = request.auth.token.name || "Membre Anonyme";
-
-
+  
   // 3b. Valider les données d'entrée
   const {title, content} = request.data;
   if (!title || typeof title !== "string" || title.trim().length === 0) {
@@ -431,9 +428,20 @@ export const createCommunityPost = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "Le contenu ne peut pas être vide.");
   }
 
-  logger.info(`L'utilisateur ${authorId} (${authorName}) crée une nouvelle discussion: "${title}"`);
+  logger.info(`L'utilisateur ${authorId} crée une nouvelle discussion: "${title}"`);
 
   try {
+    // 4. Récupérer les informations de l'auteur depuis Firestore
+    const userRef = db.collection("users").doc(authorId);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      throw new HttpsError("not-found", "Profil utilisateur introuvable.");
+    }
+
+    const authorName = userDoc.data()?.displayName || "Membre Anonyme";
+
+
     // 5. Préparer et créer le nouveau document de post
     const newPost = {
       title,
@@ -522,18 +530,23 @@ export const addCommentToPost = onCall(async (request) => {
   }
 
   const authorId = request.auth.uid;
-  const authorName = request.auth.token.name || "Membre Anonyme";
   const authorAvatar = request.auth.token.picture || null;
-
-  logger.info(`L'utilisateur ${authorId} (${authorName}) ajoute un commentaire au post ${postId}.`);
 
   try {
     const postRef = db.collection("community_posts").doc(postId);
     const commentsCollectionRef = postRef.collection("comments");
+    const userRef = db.collection('users').doc(authorId);
 
     // 3. Utiliser une transaction pour garantir l'atomicité
     await db.runTransaction(async (transaction) => {
-        // Optionnel mais recommandé : vérifier que le post existe avant de commenter
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists) {
+            throw new HttpsError("not-found", "Profil utilisateur introuvable pour récupérer le surnom.");
+        }
+        const authorName = userDoc.data()?.nickname || "Membre Anonyme";
+        
+        logger.info(`L'utilisateur ${authorId} (${authorName}) ajoute un commentaire au post ${postId}.`);
+
         const postDoc = await transaction.get(postRef);
         if (!postDoc.exists) {
             throw new HttpsError("not-found", "La discussion à laquelle vous essayez de répondre n'existe pas.");
