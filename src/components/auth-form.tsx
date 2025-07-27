@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, setPersistence, browserSessionPersistence, browserLocalPersistence } from "firebase/auth";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { firebaseApp } from "@/lib/firebase";
 import Image from "next/image";
 
@@ -33,7 +34,9 @@ import { Label } from "./ui/label";
 
 
 const authSchema = z.object({
-  name: z.string().optional(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  nickname: z.string().optional(),
   email: z.string().email({ message: "Veuillez entrer une adresse e-mail valide." }),
   password: z.string().min(6, { message: "Le mot de passe doit contenir au moins 6 caractères." }),
 });
@@ -45,11 +48,15 @@ export function AuthForm() {
   const router = useRouter();
   const { toast } = useToast();
   const auth = getAuth(firebaseApp);
+  const functions = getFunctions(firebaseApp);
+  const finalizeRegistration = httpsCallable(functions, 'finalizeRegistration');
 
   const form = useForm<z.infer<typeof authSchema>>({
     resolver: zodResolver(authSchema),
     defaultValues: {
-      name: "",
+      firstName: "",
+      lastName: "",
+      nickname: "",
       email: "",
       password: "",
     },
@@ -59,17 +66,37 @@ export function AuthForm() {
     setIsLoading(true);
     try {
       if (isSignUp) {
-        if (!values.name || values.name.length < 2) {
-            form.setError("name", { type: "manual", message: "Le nom doit contenir au moins 2 caractères."});
+        if (!values.firstName || values.firstName.trim().length < 2) {
+            form.setError("firstName", { type: "manual", message: "Le prénom est obligatoire."});
+        }
+        if (!values.lastName || values.lastName.trim().length < 2) {
+            form.setError("lastName", { type: "manual", message: "Le nom est obligatoire."});
+        }
+        if (!values.nickname || values.nickname.trim().length < 3) {
+            form.setError("nickname", { type: "manual", message: "Le surnom doit contenir au moins 3 caractères."});
+        }
+        
+        // Re-check for errors after setting them
+        if (form.formState.errors.firstName || form.formState.errors.lastName || form.formState.errors.nickname) {
             setIsLoading(false);
             return;
         }
+
         const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
-        await updateProfile(userCredential.user, { displayName: values.name });
+        await updateProfile(userCredential.user, { displayName: values.nickname });
+        
+        // Call the new Cloud Function to create the Firestore document
+        await finalizeRegistration({
+            firstName: values.firstName,
+            lastName: values.lastName,
+            nickname: values.nickname
+        });
+
         toast({
           title: "Inscription réussie !",
           description: "Bienvenue ! Vous allez être redirigé.",
         });
+
       } else {
         const persistenceType = rememberMe ? browserLocalPersistence : browserSessionPersistence;
         await setPersistence(auth, persistenceType);
@@ -125,19 +152,47 @@ export function AuthForm() {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             {isSignUp && (
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nom complet</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Jean Dupont" {...field} disabled={isLoading} style={{ minHeight: "48px" }} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <>
+                <FormField
+                  control={form.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Prénom</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Jean" {...field} disabled={isLoading} style={{ minHeight: "48px" }} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 <FormField
+                  control={form.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nom</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Dupont" {...field} disabled={isLoading} style={{ minHeight: "48px" }} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 <FormField
+                  control={form.control}
+                  name="nickname"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Surnom (public)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="JeanD" {...field} disabled={isLoading} style={{ minHeight: "48px" }} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </>
             )}
             <FormField
               control={form.control}

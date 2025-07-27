@@ -12,47 +12,54 @@ try {
 }
 const db = admin.firestore();
 
+const SERVICE_PILLARS = [
+  "Protection & Assurance",
+  "Habitat & Rénovation",
+  "Assistance & Quotidien",
+  "Loisirs & Voyages",
+];
+
+
 /**
- * Se déclenche à la création d'un nouvel utilisateur dans Firebase Authentication (v1 Trigger).
- * Crée un document de profil correspondant dans la collection 'users' de Firestore.
- * @param {functions.auth.UserRecord} user - L'objet utilisateur fourni par le déclencheur.
+ * Finalise l'inscription d'un utilisateur en créant son profil dans Firestore.
+ * Doit être appelée par le client juste après la création du compte Auth.
  */
-export const createUserProfile = functions.auth.user().onCreate(async user => {
-  logger.info(
-    `[createUserProfile] - Début de la création du profil pour l'utilisateur UID : ${user.uid}`
-  );
+export const finalizeRegistration = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Vous devez être authentifié pour finaliser votre inscription.");
+    }
 
-  // 1. Définir les données du nouveau profil utilisateur
-  const newUserProfile = {
-    uid: user.uid,
-    email: user.email || '', // Assurer que l'email est toujours une chaîne
-    displayName: user.displayName || 'Nouveau Membre', // Fournir un nom par défaut
-    photoURL: user.photoURL || null, // Gérer l'absence de photo
-    membershipLevel: 'essentiel', // Niveau d'adhésion initial
-    loyaltyPoints: 0, // Points de fidélité initiaux
-    createdAt: admin.firestore.FieldValue.serverTimestamp(), // Date de création
-    role: 'member', // Assign default role
-  };
+    const { firstName, lastName, nickname } = request.data;
+    if (!firstName || !lastName || !nickname) {
+        throw new HttpsError("invalid-argument", "Les informations de profil (prénom, nom, surnom) sont requises.");
+    }
+    
+    const uid = request.auth.uid;
+    const email = request.auth.token.email || '';
 
-  try {
-    // 2. Créer le nouveau document dans la collection 'users' avec l'UID de l'utilisateur comme ID de document.
-    await db.collection('users').doc(user.uid).set(newUserProfile);
+    const newUserProfile = {
+        uid: uid,
+        email: email,
+        firstName: firstName,
+        lastName: lastName,
+        nickname: nickname,
+        displayName: nickname, // For consistency, as it's the public name
+        membershipLevel: "essentiel",
+        loyaltyPoints: 0,
+        role: "member",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
 
-    logger.info(
-      `[createUserProfile] - Profil créé avec succès dans Firestore pour l'utilisateur UID : ${user.uid}`
-    );
-  } catch (error) {
-    logger.error(
-      `[createUserProfile] - Erreur lors de la création du profil pour l'UID ${user.uid}:`,
-      error
-    );
-    // Propager l'erreur pour que Firebase puisse la suivre et potentiellement retenter.
-    throw new functions.https.HttpsError(
-      'internal',
-      "Une erreur est survenue lors de la création du profil utilisateur."
-    );
-  }
+    try {
+        await db.collection("users").doc(uid).set(newUserProfile);
+        logger.info(`[finalizeRegistration] - Profil créé avec succès pour l'utilisateur UID : ${uid}`);
+        return { success: true };
+    } catch (error) {
+        logger.error(`[finalizeRegistration] - Erreur lors de la création du profil pour l'UID ${uid}:`, error);
+        throw new HttpsError("internal", "Une erreur est survenue lors de la création de votre profil.");
+    }
 });
+
 
 /**
  * Permet à un concierge de valider une demande de service,
@@ -263,12 +270,11 @@ export const createPartner = onCall(async (request) => {
 
     // 2. Validation des données
     const { name, description, servicePillar } = request.data;
-    const validPillars = ['Protection & Assurance', 'Habitat & Rénovation', 'Assistance & Quotidien', 'Loisirs & Voyages'];
-
-    if (!name || typeof name !== 'string' || name.length < 3) {
-        throw new HttpsError('invalid-argument', 'Le nom du partenaire est invalide ou trop court.');
+    
+    if (!name || typeof name !== 'string' || name.trim() === "") {
+        throw new HttpsError('invalid-argument', 'Le nom du partenaire est obligatoire.');
     }
-    if (!servicePillar || !validPillars.includes(servicePillar)) {
+    if (!servicePillar || !SERVICE_PILLARS.includes(servicePillar)) {
         throw new HttpsError('invalid-argument', 'Le pilier de service fourni est invalide.');
     }
      if (!description || typeof description !== 'string' || description.length < 10) {
@@ -278,11 +284,11 @@ export const createPartner = onCall(async (request) => {
 
     // 3. Création du document
     const newPartner = {
-        name,
-        description,
-        servicePillar,
+        name: name,
+        description: description,
+        servicePillar: servicePillar,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdBy: request.auth.uid,
+        addedBy: request.auth.uid,
     };
 
     try {
@@ -294,3 +300,204 @@ export const createPartner = onCall(async (request) => {
         throw new HttpsError('internal', 'Une erreur est survenue lors de la création du partenaire.');
     }
 });
+
+
+/**
+ * Permet à un concierge ou admin de mettre à jour un partenaire existant.
+ */
+export const updatePartner = onCall(async (request) => {
+  // 3a. Vérification de l'authentification et du rôle
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Vous devez être authentifié pour effectuer cette action.");
+  }
+  const callerClaims = request.auth.token;
+  if (callerClaims.role !== "admin" && callerClaims.role !== "concierge") {
+    logger.warn(`L'utilisateur ${request.auth.uid} a tenté de modifier un partenaire sans autorisation.`);
+    throw new HttpsError("permission-denied", "Seul un administrateur ou un concierge peut modifier un partenaire.");
+  }
+
+  // 3b. Validation de l'ID du partenaire
+  const {partnerId, updatedData} = request.data;
+  if (!partnerId || typeof partnerId !== "string") {
+    throw new HttpsError("invalid-argument", "L'ID du partenaire est manquant ou invalide.");
+  }
+
+  // 3c. Validation des données de mise à jour
+  if (!updatedData || typeof updatedData !== "object") {
+    throw new HttpsError("invalid-argument", "Les données de mise à jour sont requises.");
+  }
+  if (updatedData.name !== undefined && (typeof updatedData.name !== "string" || updatedData.name.trim() === "")) {
+    throw new HttpsError("invalid-argument", "Le nom du partenaire ne peut pas être vide.");
+  }
+  if (updatedData.servicePillar !== undefined && !SERVICE_PILLARS.includes(updatedData.servicePillar)) {
+    throw new HttpsError("invalid-argument", "Le pilier de service fourni est invalide.");
+  }
+
+  // Nettoyer les données pour n'envoyer que les champs autorisés
+  const allowedFields = ["name", "description", "servicePillar"];
+  const cleanData: {[key: string]: any} = {};
+  for (const field of allowedFields) {
+    if (updatedData[field] !== undefined) {
+      cleanData[field] = updatedData[field];
+    }
+  }
+  if (Object.keys(cleanData).length === 0) {
+    throw new HttpsError("invalid-argument", "Aucune donnée de mise à jour valide n'a été fournie.");
+  }
+  cleanData.lastUpdatedAt = admin.firestore.FieldValue.serverTimestamp(); // Ajouter un timestamp de mise à jour
+
+  logger.info(`Tentative de mise à jour du partenaire ${partnerId} par ${request.auth.uid} (${callerClaims.role}) avec les données :`, cleanData);
+
+  try {
+    // 4. Mettre à jour le document dans Firestore
+    const partnerRef = db.collection("partners").doc(partnerId);
+    await partnerRef.update(cleanData);
+
+    // 5. Loguer la modification
+    logger.info(`Le partenaire ${partnerId} a été modifié avec succès par le concierge ${request.auth.uid}.`);
+
+    // 6. Retourner un message de succès
+    return {success: true, message: "Partenaire mis à jour avec succès."};
+  } catch (error: any) {
+    logger.error(`Erreur lors de la mise à jour du partenaire ${partnerId}:`, error);
+    if (error.code === "not-found") {
+      throw new HttpsError("not-found", `Le partenaire avec l'ID ${partnerId} n'a pas été trouvé.`);
+    }
+    throw new HttpsError("internal", "Une erreur interne s'est produite lors de la mise à jour du partenaire.");
+  }
+});
+
+
+/**
+ * Permet à un concierge ou admin de supprimer un partenaire.
+ */
+export const deletePartner = onCall(async (request) => {
+  // 3. Sécurité : Vérification de l'authentification et du rôle
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Vous devez être authentifié pour effectuer cette action.");
+  }
+  const callerClaims = request.auth.token;
+  if (callerClaims.role !== "admin" && callerClaims.role !== "concierge") {
+    logger.warn(`L'utilisateur ${request.auth.uid} a tenté de supprimer un partenaire sans autorisation.`);
+    throw new HttpsError("permission-denied", "Seul un administrateur ou un concierge peut supprimer un partenaire.");
+  }
+
+  // 2. Validation de l'ID du partenaire
+  const {partnerId} = request.data;
+  if (!partnerId || typeof partnerId !== "string") {
+    throw new HttpsError("invalid-argument", "L'ID du partenaire est manquant ou invalide.");
+  }
+
+  logger.info(`Tentative de suppression du partenaire ${partnerId} par ${request.auth.uid} (${callerClaims.role}).`);
+
+  try {
+    // 4. Logique de suppression
+    const partnerRef = db.collection("partners").doc(partnerId);
+    await partnerRef.delete();
+
+    logger.info(`Le partenaire ${partnerId} a été supprimé avec succès par ${request.auth.uid}.`);
+
+    // 5. Retourner un message de succès
+    return {success: true, message: "Partenaire supprimé avec succès."};
+  } catch (error) {
+    logger.error(`Erreur lors de la suppression du partenaire ${partnerId}:`, error);
+    // Le SDK admin ne retourne pas une erreur "not-found" spécifique sur .delete()
+    // La suppression d'un document inexistant ne lève pas d'erreur.
+    // Cette approche est idempotente et généralement acceptable.
+    throw new HttpsError("internal", "Une erreur interne s'est produite lors de la suppression du partenaire.");
+  }
+});
+
+
+/**
+ * Permet à un membre authentifié de créer une nouvelle discussion dans le forum.
+ */
+export const createCommunityPost = onCall(async (request) => {
+  // 3a. Vérifier que l'appelant est authentifié
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Vous devez être connecté pour créer une discussion.");
+  }
+  const authorId = request.auth.uid;
+  // Utiliser le displayName du token (qui est le nickname)
+  const authorName = request.auth.token.name || "Membre Anonyme";
+
+
+  // 3b. Valider les données d'entrée
+  const {title, content} = request.data;
+  if (!title || typeof title !== "string" || title.trim().length === 0) {
+    throw new HttpsError("invalid-argument", "Le titre est obligatoire.");
+  }
+  if (!content || typeof content !== "string" || content.trim().length === 0) {
+    throw new HttpsError("invalid-argument", "Le contenu ne peut pas être vide.");
+  }
+
+  logger.info(`L'utilisateur ${authorId} (${authorName}) crée une nouvelle discussion: "${title}"`);
+
+  try {
+    // 5. Préparer et créer le nouveau document de post
+    const newPost = {
+      title,
+      content,
+      authorId,
+      authorName,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      commentsCount: 0,
+      lastCommentAt: null,
+    };
+
+    const postRef = await db.collection("community_posts").add(newPost);
+    logger.info(`Discussion "${title}" créée avec succès avec l'ID: ${postRef.id}`);
+
+    // 6. Retourner un message de succès avec l'ID du post
+    return {success: true, postId: postRef.id, message: "Discussion créée avec succès !"};
+  } catch (error) {
+    logger.error(`Erreur lors de la création de la discussion par ${authorId}:`, error);
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    throw new HttpsError("internal", "Une erreur interne est survenue lors de la création de la discussion.");
+  }
+});
+
+/**
+ * Attribue des points de fidélité à un utilisateur lorsqu'il crée une nouvelle discussion.
+ */
+export const awardPointsForNewPost = functions.firestore
+  .document("community_posts/{postId}")
+  .onCreate(async (snapshot, context) => {
+    const postData = snapshot.data();
+    if (!postData) {
+      logger.error("Aucune donnée trouvée dans le document de post créé:", context.params.postId);
+      return;
+    }
+
+    const authorId = postData.authorId;
+    if (!authorId) {
+      logger.error("Aucun authorId trouvé dans le document de post:", context.params.postId);
+      return;
+    }
+
+    const userRef = db.collection("users").doc(authorId);
+
+    try {
+      // Incrémente de manière atomique les points de l'utilisateur
+      await userRef.update({
+        loyaltyPoints: admin.firestore.FieldValue.increment(10),
+      });
+
+      // Crée également une transaction pour l'historique
+      const transactionRef = db.collection("transactions").doc();
+      await transactionRef.set({
+        userId: authorId,
+        type: "forum_post_reward",
+        points: 10,
+        description: `Récompense pour la discussion : "${postData.title}"`,
+        postId: context.params.postId,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      logger.info(`+10 points attribués à l'utilisateur ${authorId} pour la création du post ${context.params.postId}.`);
+    } catch (error) {
+      logger.error(`Erreur lors de l'attribution des points à ${authorId} pour le post ${context.params.postId}:`, error);
+    }
+  });
