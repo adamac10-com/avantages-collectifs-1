@@ -125,18 +125,17 @@ export function RewardsPage() {
     } finally {
         setRedeemingStates(prev => ({ ...prev, [rewardId]: false }));
     }
-  }
+  };
 
   const filteredRewards = useMemo(() => {
-    // Ne filtre que si les deux sources de données sont prêtes
     if (!userData || !rewards) {
       return [];
     }
     return rewards.filter(reward => {
       if (userData.membershipLevel === 'privilege') {
-        return true; // Les membres Privilège voient toutes les récompenses
+        return true; 
       }
-      return reward.requiredLevel === 'essentiel'; // Les membres Essentiel ne voient que les leurs
+      return reward.requiredLevel === 'essentiel';
     });
   }, [userData, rewards]);
 
@@ -210,7 +209,7 @@ export function RewardsPage() {
                     <Card key={reward.id} className="flex flex-col">
                         <CardHeader>
                             <CardTitle>{reward.title}</CardTitle>
-                            <CardDescription className="pt-2">{reward.description}</CardHeader>
+                            <CardDescription className="pt-2">{reward.description}</CardDescription>
                         </CardHeader>
                         <CardContent className="flex-grow flex items-center gap-2 font-semibold text-accent text-lg">
                            <Coins />
@@ -278,3 +277,4 @@ export function RewardsPage() {
     </div>
   );
 }
+ 
