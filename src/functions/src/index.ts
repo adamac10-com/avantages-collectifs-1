@@ -439,7 +439,7 @@ export const createCommunityPost = onCall(async (request) => {
       throw new HttpsError("not-found", "Profil utilisateur introuvable.");
     }
 
-    const authorName = userDoc.data()?.displayName || "Membre Anonyme";
+    const authorName = userDoc.data()?.nickname || "Membre Anonyme";
 
 
     // 5. Préparer et créer le nouveau document de post
