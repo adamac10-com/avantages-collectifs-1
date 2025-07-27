@@ -85,7 +85,7 @@ export function AuthForm() {
         const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
         await updateProfile(userCredential.user, { displayName: values.nickname });
         
-        // Call the new Cloud Function to create the Firestore document
+        // Call the Cloud Function to create the Firestore document
         await finalizeRegistration({
             firstName: values.firstName,
             lastName: values.lastName,
@@ -118,6 +118,7 @@ export function AuthForm() {
       } else if (errorCode === "auth/invalid-email") {
         errorMessage = "L'adresse e-mail n'est pas valide.";
       }
+      console.error("Authentication error:", error);
       toast({
         title: "Erreur",
         description: errorMessage,
@@ -132,10 +133,10 @@ export function AuthForm() {
     <Card>
       <CardHeader className="items-center">
         <Image 
-          src="/logo2.png"
+          src="/logo.png"
           alt="Logo Avantages Collectifs"
-          width={180}
-          height={45}
+          width={150}
+          height={37.5}
           className="mb-6"
           priority
         />
@@ -252,3 +253,5 @@ export function AuthForm() {
     </Card>
   );
 }
+
+    
