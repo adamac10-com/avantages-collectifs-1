@@ -492,3 +492,69 @@ export const awardPointsForNewPost = functions.firestore
       logger.error(`Erreur lors de l'attribution des points à ${authorId} pour le post ${context.params.postId}:`, error);
     }
   });
+
+
+/**
+ * Permet à un membre authentifié d'ajouter un commentaire à une discussion.
+ */
+export const addCommentToPost = onCall(async (request) => {
+  // 1. Vérifier que l'utilisateur est authentifié
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Vous devez être connecté pour commenter.");
+  }
+
+  // 2. Valider les données d'entrée
+  const { postId, content } = request.data;
+  if (!postId || typeof postId !== "string") {
+    throw new HttpsError("invalid-argument", "L'ID de la discussion est manquant ou invalide.");
+  }
+  if (!content || typeof content !== "string" || content.trim().length === 0) {
+    throw new HttpsError("invalid-argument", "Le contenu du commentaire ne peut pas être vide.");
+  }
+
+  const authorId = request.auth.uid;
+  const authorName = request.auth.token.name || "Membre Anonyme";
+  const authorAvatar = request.auth.token.picture || null;
+
+  logger.info(`L'utilisateur ${authorId} (${authorName}) ajoute un commentaire au post ${postId}.`);
+
+  try {
+    const postRef = db.collection("community_posts").doc(postId);
+    const commentsCollectionRef = postRef.collection("comments");
+
+    // 3. Utiliser une transaction pour garantir l'atomicité
+    await db.runTransaction(async (transaction) => {
+        // Optionnel mais recommandé : vérifier que le post existe avant de commenter
+        const postDoc = await transaction.get(postRef);
+        if (!postDoc.exists) {
+            throw new HttpsError("not-found", "La discussion à laquelle vous essayez de répondre n'existe pas.");
+        }
+
+        // Ajouter le nouveau commentaire
+        const newCommentRef = commentsCollectionRef.doc(); // Crée une nouvelle référence de document
+        transaction.set(newCommentRef, {
+            content: content,
+            authorId: authorId,
+            authorName: authorName,
+            authorAvatar: authorAvatar,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // Mettre à jour le compteur de commentaires et la date du dernier commentaire sur le post parent
+        transaction.update(postRef, {
+            commentsCount: admin.firestore.FieldValue.increment(1),
+            lastCommentAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+    });
+    
+    logger.info(`Commentaire ajouté avec succès au post ${postId} par ${authorId}.`);
+    return { success: true, message: "Commentaire ajouté avec succès." };
+
+  } catch (error) {
+    logger.error(`Erreur lors de l'ajout du commentaire par ${authorId} au post ${postId}:`, error);
+    if (error instanceof HttpsError) {
+        throw error;
+    }
+    throw new HttpsError("internal", "Une erreur est survenue lors de l'ajout de votre commentaire.");
+  }
+});
