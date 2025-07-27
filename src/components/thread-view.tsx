@@ -4,7 +4,20 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { useState, useEffect } from "react";
+import {
+  doc,
+  collection,
+  query,
+  orderBy,
+  Timestamp,
+  addDoc,
+  serverTimestamp,
+  updateDoc,
+} from "firebase/firestore";
+import { useDocumentData, useCollection } from "react-firebase-hooks/firestore";
+import { db, firebaseApp } from "@/lib/firebase";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { useAuth } from "@/hooks/useAuth";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,202 +30,294 @@ import {
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { AlertTriangle } from "lucide-react";
-import { memberData, setMemberData } from "@/lib/member-data";
-
-// Mock data
-const initialThreadData = {
-  id: "1",
-  title: "Conseils pour l'entretien du jardin en été ?",
-  posts: [
-    {
-      id: "post1",
-      authorName: "Marie Dubois",
-      authorAvatar: "https://placehold.co/100x100.png",
-      createdAt: new Date("2024-07-20T10:00:00Z"),
-      content:
-        "Bonjour à tous, l'été est là et mon jardin commence à souffrir de la chaleur. Avez-vous des astuces ou des conseils pour garder mes plantes en bonne santé sans gaspiller trop d'eau ? Merci d'avance !",
-    },
-    {
-      id: "post2",
-      authorName: "Jean Dupont",
-      authorAvatar: "https://placehold.co/100x100.png",
-      createdAt: new Date("2024-07-20T11:30:00Z"),
-      content:
-        "Excellente question, Marie ! Je vous conseille d'installer un paillage au pied de vos plantes. Ça conserve l'humidité et ça limite les mauvaises herbes. Les copeaux de bois ou la paille fonctionnent très bien.",
-    },
-    {
-      id: "post3",
-      authorName: "Claire Lefebvre",
-      authorAvatar: "https://placehold.co/100x100.png",
-      createdAt: new Date("2024-07-20T14:00:00Z"),
-      content:
-        "Pensez aussi à arroser tôt le matin ou tard le soir pour éviter l'évaporation. Un arrosage moins fréquent mais plus abondant est souvent plus efficace.",
-    },
-  ],
-};
+import { AlertTriangle, UserCircle } from "lucide-react";
+import { Skeleton } from "./ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 
 const replyFormSchema = z.object({
-  reply: z.string().min(10, {
-    message: "Votre réponse doit contenir au moins 10 caractères.",
-  }),
+  content: z
+    .string()
+    .min(10, {
+      message: "Votre réponse doit contenir au moins 10 caractères.",
+    })
+    .max(2000, {
+      message: "Votre réponse ne peut pas dépasser 2000 caractères.",
+    }),
 });
 
-function FormattedDate({ date }: { date: Date }) {
-  const [formattedDate, setFormattedDate] = useState("");
-
-  useEffect(() => {
-    setFormattedDate(
-      new Date(date).toLocaleString("fr-FR", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      })
-    );
-  }, [date]);
-
-  return <>{formattedDate}</>;
-}
-
+// Helper to format dates
+const formatDate = (timestamp: Timestamp | null | undefined): string => {
+  if (!timestamp) return "Date inconnue";
+  return timestamp.toDate().toLocaleString("fr-FR", {
+    dateStyle: "long",
+    timeStyle: "short",
+  });
+};
 
 export function ThreadView({ threadId }: { threadId: string }) {
+  const { user } = useAuth();
   const { toast } = useToast();
-  const [threadData, setThreadData] = useState(initialThreadData);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Get thread data
+  const threadRef = doc(db, "community_posts", threadId);
+  const [threadData, loadingThread, errorThread] = useDocumentData(threadRef);
+
+  // Get comments data
+  const commentsRef = collection(db, "community_posts", threadId, "comments");
+  const commentsQuery = query(commentsRef, orderBy("createdAt", "asc"));
+  const [commentsSnapshot, loadingComments, errorComments] =
+    useCollection(commentsQuery);
 
   const form = useForm<z.infer<typeof replyFormSchema>>({
     resolver: zodResolver(replyFormSchema),
     defaultValues: {
-      reply: "",
+      content: "",
     },
   });
 
-  function onReplySubmit(values: z.infer<typeof replyFormSchema>) {
-    const newPost = {
-        id: `post${Date.now()}`,
-        authorName: memberData.name,
-        authorAvatar: "https://placehold.co/100x100.png",
-        createdAt: new Date(),
-        content: values.reply,
-    };
-    
-    // In a real app, this would submit to Firestore and the UI would update via onSnapshot
-    setThreadData(prevData => ({
-        ...prevData,
-        posts: [...prevData.posts, newPost]
-    }));
+  async function onReplySubmit(values: z.infer<typeof replyFormSchema>) {
+    if (!user) {
+      toast({
+        title: "Connexion requise",
+        description: "Vous devez être connecté pour répondre.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsSubmitting(true);
 
-    // Simulate loyalty points logic
-    const pointsAwarded = 10;
-    setMemberData({ loyaltyPoints: memberData.loyaltyPoints + pointsAwarded });
-    
-    // Simulate transaction log
-    console.log("TRANSACTION LOG:", {
-      userId: "current_user_id", // Replace with actual user ID
-      type: "points_earned",
-      points: pointsAwarded,
-      description: "Participation au forum communautaire",
-      timestamp: new Date().toISOString(),
-    });
+    try {
+      // Create a new comment document
+      await addDoc(commentsRef, {
+        content: values.content,
+        authorId: user.uid,
+        authorName: user.displayName || "Membre Anonyme",
+        authorAvatar: user.photoURL || null,
+        createdAt: serverTimestamp(),
+      });
+      
+      // Update comments count on the main thread document
+      await updateDoc(threadRef, {
+        commentsCount: (threadData?.commentsCount || 0) + 1,
+        lastCommentAt: serverTimestamp(),
+      });
 
-    toast({
-      title: "Réponse publiée !",
-      description: `Merci pour votre contribution. Vous avez gagné ${pointsAwarded} points de fidélité !`,
-    });
-    form.reset();
+      toast({
+        title: "Réponse publiée !",
+        description: "Merci pour votre contribution.",
+      });
+      form.reset();
+    } catch (error) {
+      console.error("Erreur lors de l'ajout du commentaire:", error);
+      toast({
+        title: "Erreur",
+        description:
+          "Une erreur est survenue lors de la publication de votre réponse.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   function handleReport(postId: string) {
+    // In a real app, this would call a Cloud Function to handle the report.
+    console.log(`Reporting post/comment with ID: ${postId}`);
     toast({
       title: "Message signalé",
       description:
-        "Merci. Votre signalement a été transmis à l'équipe de modération.",
+        "Merci. Votre signalement a été transmis à notre équipe de modération.",
     });
-    console.log(`Post ${postId} reported.`); // To be implemented
+  }
+
+  if (loadingThread) {
+    return (
+      <div className="space-y-8">
+        <Skeleton className="h-10 w-3/4" />
+        <Skeleton className="h-6 w-1/2" />
+        <Card>
+          <CardContent className="p-6">
+            <Skeleton className="h-24 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (errorThread || !threadData) {
+    return (
+      <Alert variant="destructive">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>Erreur</AlertTitle>
+        <AlertDescription>
+          Impossible de charger cette discussion. Elle n'existe peut-être plus.
+        </AlertDescription>
+      </Alert>
+    );
   }
 
   return (
     <div className="space-y-8">
-      <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
-        {threadData.title}
-      </h1>
+      {/* Thread Title and Original Post */}
+      <Card className="border-primary">
+        <CardHeader>
+          <CardTitle className="text-3xl font-bold tracking-tight md:text-4xl">
+            {threadData.title}
+          </CardTitle>
+          <CardDescription className="pt-2 flex items-center gap-2">
+            <Avatar className="h-6 w-6">
+              {threadData.authorAvatar && (
+                <AvatarImage
+                  src={threadData.authorAvatar}
+                  alt={threadData.authorName}
+                />
+              )}
+              <AvatarFallback>
+                <UserCircle />
+              </AvatarFallback>
+            </Avatar>
+            <span>
+              Par <strong>{threadData.authorName}</strong> •{" "}
+              {formatDate(threadData.createdAt)}
+            </span>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="prose prose-lg max-w-none text-foreground">
+            {threadData.content}
+          </div>
+        </CardContent>
+      </Card>
 
+      {/* Comments Section */}
       <div className="space-y-6">
-        {threadData.posts.map((post, index) => (
-          <Card key={post.id} className={index === 0 ? "border-primary" : ""}>
-            <CardContent className="p-6">
-              <div className="flex gap-4">
-                <Avatar className="h-12 w-12">
-                  <AvatarImage src={post.authorAvatar} alt={post.authorName} data-ai-hint="person portrait" />
-                  <AvatarFallback>
-                    {post.authorName.charAt(0)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <p className="font-bold text-lg">{post.authorName}</p>
-                    <div className="flex items-center gap-4">
-                      <p className="text-sm text-muted-foreground">
-                        <FormattedDate date={post.createdAt} />
-                      </p>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleReport(post.id)}
-                        aria-label="Signaler ce message"
-                        className="h-auto px-2 py-1 text-muted-foreground hover:text-destructive"
-                      >
-                        <AlertTriangle className="h-4 w-4 mr-1" /> Signaler
-                      </Button>
+        <h2 className="text-2xl font-bold border-b pb-2">
+            {commentsSnapshot?.docs.length || 0} Réponse(s)
+        </h2>
+        {loadingComments ? (
+          <div className="space-y-4">
+            <Skeleton className="h-32 w-full" />
+            <Skeleton className="h-32 w-full" />
+          </div>
+        ) : (
+          commentsSnapshot?.docs.map((doc) => {
+            const comment = doc.data();
+            return (
+              <Card key={doc.id}>
+                <CardContent className="p-6">
+                  <div className="flex gap-4">
+                    <Avatar className="h-10 w-10">
+                      {comment.authorAvatar && (
+                        <AvatarImage
+                          src={comment.authorAvatar}
+                          alt={comment.authorName}
+                          data-ai-hint="person portrait"
+                        />
+                      )}
+                      <AvatarFallback>
+                        {comment.authorName?.charAt(0) || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <p className="font-bold">{comment.authorName}</p>
+                        <div className="flex items-center gap-4">
+                          <p className="text-sm text-muted-foreground">
+                            {formatDate(comment.createdAt)}
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleReport(doc.id)}
+                            aria-label="Signaler ce commentaire"
+                            className="h-auto px-2 py-1 text-xs text-muted-foreground hover:text-destructive"
+                            disabled={!user}
+                          >
+                            <AlertTriangle className="h-3 w-3 mr-1" /> Signaler
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="prose max-w-none text-foreground mt-2">
+                        {comment.content}
+                      </div>
                     </div>
                   </div>
-                  <div className="prose prose-lg max-w-none text-foreground mt-2">
-                    {post.content}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
+        {errorComments && (
+           <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Erreur</AlertTitle>
+            <AlertDescription>
+                Impossible de charger les commentaires pour cette discussion.
+            </AlertDescription>
+         </Alert>
+        )}
       </div>
 
+      {/* Reply Form */}
       <Card className="bg-muted/30">
         <CardContent className="p-6">
           <h2 className="text-2xl font-bold mb-4">Votre réponse</h2>
-          <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(onReplySubmit)}
-              className="space-y-4"
-            >
-              <FormField
-                control={form.control}
-                name="reply"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Partagez votre expérience ou vos conseils ici..."
-                        className="min-h-[150px] text-base"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="flex justify-end">
-                <Button
-                  type="submit"
-                  size="lg"
-                  style={{ minHeight: "48px" }}
-                >
-                  Publier ma réponse
-                </Button>
-              </div>
-            </form>
-          </Form>
+          {user ? (
+            <Form {...form}>
+              <form
+                onSubmit={form.handleSubmit(onReplySubmit)}
+                className="space-y-4"
+              >
+                <FormField
+                  control={form.control}
+                  name="content"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Partagez votre expérience ou vos conseils ici..."
+                          className="min-h-[150px] text-base bg-background"
+                          {...field}
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    size="lg"
+                    style={{ minHeight: "48px" }}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "Publication..." : "Publier ma réponse"}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          ) : (
+             <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Vous devez être connecté</AlertTitle>
+                <AlertDescription>
+                   Pour participer à la discussion, veuillez vous connecter à votre compte.
+                </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
       </Card>
     </div>
   );
 }
+
