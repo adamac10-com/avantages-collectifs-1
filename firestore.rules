@@ -2,56 +2,51 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Règle pour la collection 'partners'
+    // Les utilisateurs peuvent lire/modifier leur propre profil, mais pas celui des autres.
+    // La création se fait via une Cloud Function sécurisée.
+    match /users/{userId} {
+      allow read, update: if request.auth != null && request.auth.uid == userId;
+      allow create, delete: if false;
+    }
+
+    // N'importe quel utilisateur authentifié peut lire la liste des partenaires.
+    // L'écriture (create, update, delete) est gérée par les Cloud Functions.
     match /partners/{partnerId} {
       allow read: if request.auth != null;
-      // L'écriture (create, update, delete) est gérée par les Cloud Functions
-      allow write: if false; 
+      allow write: if false;
     }
 
-    // Les utilisateurs connectés peuvent lire la liste des récompenses.
-    match /rewards/{rewardId} {
-      allow read: if request.auth != null;
-    }
-
-    // Un utilisateur peut lire son propre historique de transactions.
-    match /transactions/{transactionId} {
-      allow read: if request.auth.uid == resource.data.userId;
-    }
-
-    // Règles pour les demandes de service
-    match /conciergeRequests/{requestId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth.uid == request.resource.data.memberId;
-    }
-
-    // Chaque utilisateur peut accéder à son propre document.
-    match /users/{userId} {
-      allow read, update: if request.auth.uid == userId;
-    }
-
-    // Règle pour les discussions du forum (posts)
+    // N'importe quel utilisateur authentifié peut lire les posts du forum.
+    // La création se fait via une Cloud Function.
     match /community_posts/{postId} {
-      // Tout utilisateur authentifié peut lire les discussions.
       allow read: if request.auth != null;
+      allow write: if false; // Les créations/mises à jour passent par les fonctions
       
-      // Un utilisateur authentifié peut créer une discussion si l'ID de l'auteur correspond au sien.
-      allow create: if request.auth.uid == request.resource.data.authorId;
-      
-      // L'auteur d'une discussion peut la mettre à jour ou la supprimer.
-      allow update, delete: if request.auth.uid == resource.data.authorId;
+      // N'importe quel utilisateur authentifié peut lire les commentaires.
+      // L'ajout se fait via une Cloud Function.
+      match /comments/{commentId} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+    }
+    
+    // Les demandes sont gérées par les concierges via les fonctions.
+    // Seul le membre propriétaire peut créer sa demande (à implémenter côté client).
+    match /conciergeRequests/{requestId} {
+       allow read, update: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'concierge';
+       allow create: if request.auth != null;
     }
 
-    // Règle pour les commentaires du forum
-    match /community_posts/{postId}/comments/{commentId} {
-      // Tout utilisateur authentifié peut lire les commentaires.
-      allow read: if request.auth != null;
+    // Les récompenses sont en lecture seule pour tous. L'échange se fait par fonction.
+    match /rewards/{rewardId} {
+      allow read: if true;
+      allow write: if false;
+    }
 
-      // Un utilisateur authentifié peut créer un commentaire si l'ID de l'auteur correspond au sien.
-      allow create: if request.auth.uid == request.resource.data.authorId;
-
-      // L'auteur d'un commentaire peut le supprimer.
-      allow delete: if request.auth.uid == resource.data.authorId;
+    // L'historique des transactions d'un utilisateur n'est lisible que par lui-même.
+    match /transactions/{transactionId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow write: if false;
     }
   }
 }
