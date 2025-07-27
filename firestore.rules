@@ -2,23 +2,39 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow users to read and update their own profile.
+
+    // Allow users to read and update their own profile
     match /users/{userId} {
       allow read, update: if request.auth != null && request.auth.uid == userId;
     }
-    
-    // Allow authenticated users to read posts. Create/update/delete are handled by Cloud Functions.
+
+    // Community posts are readable by any authenticated user
+    // Creation and updates are handled by Cloud Functions
     match /community_posts/{postId} {
       allow read: if request.auth != null;
-      
+
       // Rules for the comments subcollection
       match /comments/{commentId} {
-        // Allow any authenticated user to read comments.
         allow read: if request.auth != null;
-        
-        // Allow a user to create a comment only if they are the author.
         allow create: if request.auth != null && request.auth.uid == request.resource.data.authorId;
       }
+    }
+    
+    match /conciergeRequests/{requestId} {
+      allow read, write: if request.auth != null; // Simplifié pour le dev, à restreindre en prod
+    }
+    
+    match /rewards/{rewardId} {
+        allow read: if true; // Les récompenses sont publiques
+    }
+    
+    match /transactions/{transactionId} {
+        allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+    
+     match /partners/{partnerId} {
+      allow read: if true; // Tout le monde peut voir les partenaires
+      // La création, modification, suppression est gérée par des fonctions sécurisées.
     }
   }
 }
