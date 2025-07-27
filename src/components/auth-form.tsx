@@ -253,5 +253,3 @@ export function AuthForm() {
     </Card>
   );
 }
-
-    

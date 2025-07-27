@@ -11,9 +11,6 @@ import {
   query,
   orderBy,
   Timestamp,
-  addDoc,
-  serverTimestamp,
-  updateDoc,
 } from "firebase/firestore";
 import { useDocumentData, useCollection } from "react-firebase-hooks/firestore";
 import { db, firebaseApp } from "@/lib/firebase";
@@ -67,6 +64,8 @@ export function ThreadView({ threadId }: { threadId: string }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const functions = getFunctions(firebaseApp);
+  const addCommentToPost = httpsCallable(functions, 'addCommentToPost');
 
   // Get thread data
   const threadRef = doc(db, "community_posts", threadId);
@@ -97,19 +96,9 @@ export function ThreadView({ threadId }: { threadId: string }) {
     setIsSubmitting(true);
 
     try {
-      // Create a new comment document
-      await addDoc(commentsRef, {
+      await addCommentToPost({
+        postId: threadId,
         content: values.content,
-        authorId: user.uid,
-        authorName: user.displayName || "Membre Anonyme",
-        authorAvatar: user.photoURL || null,
-        createdAt: serverTimestamp(),
-      });
-      
-      // Update comments count on the main thread document
-      await updateDoc(threadRef, {
-        commentsCount: (threadData?.commentsCount || 0) + 1,
-        lastCommentAt: serverTimestamp(),
       });
 
       toast({
@@ -117,12 +106,12 @@ export function ThreadView({ threadId }: { threadId: string }) {
         description: "Merci pour votre contribution.",
       });
       form.reset();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erreur lors de l'ajout du commentaire:", error);
       toast({
         title: "Erreur",
         description:
-          "Une erreur est survenue lors de la publication de votre réponse.",
+          error.message || "Une erreur est survenue lors de la publication de votre réponse.",
         variant: "destructive",
       });
     } finally {
