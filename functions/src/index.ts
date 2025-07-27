@@ -261,7 +261,7 @@ export const createPartner = onCall(async (request) => {
   if (!name || typeof name !== "string" || name.trim() === "") {
     throw new HttpsError("invalid-argument", "Le nom du partenaire est obligatoire.");
   }
-  
+
   if (!servicePillar || !SERVICE_PILLARS.includes(servicePillar)) {
     throw new HttpsError("invalid-argument", "Le pilier de service fourni est invalide.");
   }
@@ -328,10 +328,10 @@ export const updatePartner = onCall(async (request) => {
     }
   }
   if (Object.keys(cleanData).length === 0) {
-      throw new HttpsError("invalid-argument", "Aucune donnée de mise à jour valide n'a été fournie.");
+    throw new HttpsError("invalid-argument", "Aucune donnée de mise à jour valide n'a été fournie.");
   }
   cleanData.lastUpdatedAt = admin.firestore.FieldValue.serverTimestamp(); // Ajouter un timestamp de mise à jour
-  
+
   logger.info(`Tentative de mise à jour du partenaire ${partnerId} par ${request.auth.uid} (${callerClaims.role}) avec les données :`, cleanData);
 
   try {
@@ -347,7 +347,7 @@ export const updatePartner = onCall(async (request) => {
   } catch (error: any) {
     logger.error(`Erreur lors de la mise à jour du partenaire ${partnerId}:`, error);
     if (error.code === "not-found") {
-        throw new HttpsError("not-found", `Le partenaire avec l'ID ${partnerId} n'a pas été trouvé.`);
+      throw new HttpsError("not-found", `Le partenaire avec l'ID ${partnerId} n'a pas été trouvé.`);
     }
     throw new HttpsError("internal", "Une erreur interne s'est produite lors de la mise à jour du partenaire.");
   }
@@ -381,7 +381,7 @@ export const deletePartner = onCall(async (request) => {
     await partnerRef.delete();
 
     logger.info(`Le partenaire ${partnerId} a été supprimé avec succès par ${request.auth.uid}.`);
-    
+
     // 5. Retourner un message de succès
     return {success: true, message: "Partenaire supprimé avec succès."};
   } catch (error) {
@@ -390,5 +390,62 @@ export const deletePartner = onCall(async (request) => {
     // La suppression d'un document inexistant ne lève pas d'erreur.
     // Cette approche est idempotente et généralement acceptable.
     throw new HttpsError("internal", "Une erreur interne s'est produite lors de la suppression du partenaire.");
+  }
+});
+
+/**
+ * Permet à un membre authentifié de créer une nouvelle discussion dans le forum.
+ */
+export const createCommunityPost = onCall(async (request) => {
+  // 3a. Vérifier que l'appelant est authentifié
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Vous devez être connecté pour créer une discussion.");
+  }
+  const authorId = request.auth.uid;
+
+  // 3b. Valider les données d'entrée
+  const {title, content} = request.data;
+  if (!title || typeof title !== "string" || title.trim().length === 0) {
+    throw new HttpsError("invalid-argument", "Le titre est obligatoire.");
+  }
+  if (!content || typeof content !== "string" || content.trim().length === 0) {
+    throw new HttpsError("invalid-argument", "Le contenu ne peut pas être vide.");
+  }
+
+  logger.info(`L'utilisateur ${authorId} crée une nouvelle discussion: "${title}"`);
+
+  try {
+    // 4. Récupérer les informations de l'auteur depuis Firestore
+    const userRef = db.collection("users").doc(authorId);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      throw new HttpsError("not-found", "Profil utilisateur introuvable.");
+    }
+
+    const authorName = userDoc.data()?.displayName || "Membre Anonyme";
+
+    // 5. Préparer et créer le nouveau document de post
+    const newPost = {
+      title,
+      content,
+      authorId,
+      authorName,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      commentsCount: 0,
+      lastCommentAt: null,
+    };
+
+    const postRef = await db.collection("community_posts").add(newPost);
+    logger.info(`Discussion "${title}" créée avec succès avec l'ID: ${postRef.id}`);
+
+    // 6. Retourner un message de succès avec l'ID du post
+    return {success: true, postId: postRef.id, message: "Discussion créée avec succès !"};
+  } catch (error) {
+    logger.error(`Erreur lors de la création de la discussion par ${authorId}:`, error);
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    throw new HttpsError("internal", "Une erreur interne est survenue lors de la création de la discussion.");
   }
 });

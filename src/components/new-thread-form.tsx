@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -19,6 +19,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { firebaseApp } from "@/lib/firebase";
 
 const formSchema = z.object({
   title: z
@@ -37,6 +40,9 @@ const formSchema = z.object({
 export function NewThreadForm() {
   const router = useRouter();
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+  const functions = getFunctions(firebaseApp);
+  const createCommunityPost = httpsCallable(functions, 'createCommunityPost');
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -46,14 +52,26 @@ export function NewThreadForm() {
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values); // In a real app, this would submit to Firestore
-    toast({
-      title: "Discussion publiée !",
-      description: "Votre nouveau fil de discussion est maintenant en ligne.",
-    });
-    // Redirect to the community page after submission
-    router.push("/communaute");
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsLoading(true);
+    try {
+      await createCommunityPost({ title: values.title, content: values.content });
+      toast({
+        title: "Discussion publiée !",
+        description: "Votre nouveau fil de discussion est maintenant en ligne.",
+      });
+      router.push("/communaute");
+      router.refresh();
+    } catch (error: any) {
+       console.error("Erreur lors de la création de la discussion :", error);
+       toast({
+        title: "Erreur",
+        description: error.message || "Impossible de publier la discussion. Veuillez réessayer.",
+        variant: "destructive",
+      });
+    } finally {
+        setIsLoading(false);
+    }
   }
 
   return (
@@ -77,6 +95,7 @@ export function NewThreadForm() {
                       placeholder="Posez votre question ou lancez votre sujet ici..."
                       {...field}
                       style={{ minHeight: "48px" }}
+                      disabled={isLoading}
                     />
                   </FormControl>
                   <FormMessage />
@@ -94,6 +113,7 @@ export function NewThreadForm() {
                       placeholder="Développez votre pensée, donnez des détails..."
                       className="min-h-[200px] text-base"
                       {...field}
+                      disabled={isLoading}
                     />
                   </FormControl>
                   <FormMessage />
@@ -107,6 +127,7 @@ export function NewThreadForm() {
                 size="lg"
                 onClick={() => router.back()}
                 style={{ minHeight: "48px" }}
+                disabled={isLoading}
               >
                 Annuler
               </Button>
@@ -114,8 +135,9 @@ export function NewThreadForm() {
                 type="submit"
                 size="lg"
                 style={{ minHeight: "48px" }}
+                disabled={isLoading}
               >
-                Publier la discussion
+                {isLoading ? "Publication en cours..." : "Publier la discussion"}
               </Button>
             </div>
           </form>

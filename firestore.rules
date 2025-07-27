@@ -5,7 +5,8 @@ service cloud.firestore {
     // Règle pour la collection 'partners'
     match /partners/{partnerId} {
       allow read: if request.auth != null;
-      allow write: if false;
+      // L'écriture (create, update, delete) est gérée par les Cloud Functions
+      allow write: if false; 
     }
 
     // Les utilisateurs connectés peuvent lire la liste des récompenses.
@@ -29,9 +30,28 @@ service cloud.firestore {
       allow read, update: if request.auth.uid == userId;
     }
 
-    // Tout utilisateur connecté peut interagir avec le forum.
-    match /forum_threads/{threadId}/{document=**} {
-      allow read, write: if request.auth != null;
+    // Règle pour les discussions du forum (posts)
+    match /community_posts/{postId} {
+      // Tout utilisateur authentifié peut lire les discussions.
+      allow read: if request.auth != null;
+      
+      // Un utilisateur authentifié peut créer une discussion si l'ID de l'auteur correspond au sien.
+      allow create: if request.auth.uid == request.resource.data.authorId;
+      
+      // L'auteur d'une discussion peut la mettre à jour ou la supprimer.
+      allow update, delete: if request.auth.uid == resource.data.authorId;
+    }
+
+    // Règle pour les commentaires du forum
+    match /community_posts/{postId}/comments/{commentId} {
+      // Tout utilisateur authentifié peut lire les commentaires.
+      allow read: if request.auth != null;
+
+      // Un utilisateur authentifié peut créer un commentaire si l'ID de l'auteur correspond au sien.
+      allow create: if request.auth.uid == request.resource.data.authorId;
+
+      // L'auteur d'un commentaire peut le supprimer.
+      allow delete: if request.auth.uid == resource.data.authorId;
     }
   }
 }
