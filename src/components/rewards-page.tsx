@@ -1,11 +1,12 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { db, firebaseApp } from "@/lib/firebase";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { doc, onSnapshot, collection, query, where, orderBy, Timestamp, getDocs } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
+import { useCollectionData } from "react-firebase-hooks/firestore";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,7 +26,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Gift, Coins } from "lucide-react";
+import { Gift, Coins, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface UserData {
@@ -43,7 +44,7 @@ interface Transaction {
 interface Reward {
     id: string;
     title: string;
-    description: string; // Ajout de la description
+    description: string;
     pointsCost: number;
     requiredLevel: 'essentiel' | 'privilege';
 }
@@ -53,24 +54,25 @@ export function RewardsPage() {
   const { toast } = useToast();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [rewards, setRewards] = useState<Reward[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingInitial, setLoadingInitial] = useState(true);
   const [redeemingStates, setRedeemingStates] = useState<{[key: string]: boolean}>({});
-
 
   const functions = getFunctions(firebaseApp);
   const redeemReward = httpsCallable(functions, 'redeemReward');
 
+  const rewardsQuery = query(collection(db, "rewards"), orderBy("pointsCost", "asc"));
+  const [rewards, loadingRewards, errorRewards] = useCollectionData<Reward>(rewardsQuery, {
+    idField: 'id',
+  });
 
   useEffect(() => {
     if (!user) {
-        setLoading(false);
+        setLoadingInitial(false);
         return;
-    };
+    }
 
-    setLoading(true);
+    setLoadingInitial(true);
 
-    // Fetch User Data
     const userDocRef = doc(db, "users", user.uid);
     const userUnsubscribe = onSnapshot(userDocRef, (doc) => {
       if (doc.exists()) {
@@ -80,9 +82,12 @@ export function RewardsPage() {
             membershipLevel: data.membershipLevel || 'essentiel'
         });
       }
+      setLoadingInitial(false);
+    }, (error) => {
+      console.error("Error fetching user data:", error);
+      setLoadingInitial(false);
     });
 
-    // Fetch Transactions
     const transactionsQuery = query(
       collection(db, "transactions"),
       where("userId", "==", user.uid),
@@ -96,40 +101,19 @@ export function RewardsPage() {
       setTransactions(newTransactions);
     });
 
-    // Fetch Rewards
-    const fetchRewards = async () => {
-        try {
-            const rewardsCol = collection(db, "rewards");
-            const rewardsSnapshot = await getDocs(rewardsCol);
-            const rewardsList = rewardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Reward));
-            setRewards(rewardsList);
-        } catch (error) {
-            console.error("Error fetching rewards:", error);
-            toast({
-                title: "Erreur",
-                description: "Impossible de charger le catalogue des récompenses.",
-                variant: "destructive"
-            });
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    fetchRewards();
-
     return () => {
       userUnsubscribe();
       transactionsUnsubscribe();
     };
-  }, [user, toast]);
+  }, [user]);
 
- const handleExchange = async (reward: Reward) => {
-    setRedeemingStates(prev => ({ ...prev, [reward.id]: true }));
+  const handleExchange = async (rewardId: string, rewardTitle: string) => {
+    setRedeemingStates(prev => ({ ...prev, [rewardId]: true }));
     try {
-        await redeemReward({ rewardId: reward.id });
+        await redeemReward({ rewardId: rewardId });
         toast({
             title: "Échange réussi !",
-            description: `Vos points ont été utilisés pour "${reward.title}".`
+            description: `Vos points ont été utilisés pour "${rewardTitle}".`
         });
     } catch (error: any) {
         console.error("Erreur lors de l'échange de la récompense:", error);
@@ -139,25 +123,28 @@ export function RewardsPage() {
             variant: "destructive"
         });
     } finally {
-        setRedeemingStates(prev => ({ ...prev, [reward.id]: false }));
+        setRedeemingStates(prev => ({ ...prev, [rewardId]: false }));
     }
-}
+  }
 
-
-  const filteredRewards = userData ? rewards.filter(reward => {
+  const filteredRewards = useMemo(() => {
+    if (!userData || !rewards) {
+      return [];
+    }
+    return rewards.filter(reward => {
       if (userData.membershipLevel === 'privilege') {
-          return true;
+        return true; // Les membres Privilège voient toutes les récompenses
       }
-      return reward.requiredLevel === 'essentiel';
-  }) : [];
+      return reward.requiredLevel === 'essentiel'; // Les membres Essentiel ne voient que les leurs
+    });
+  }, [userData, rewards]);
 
 
-  if (loading && !userData) { // Montre le squelette uniquement au chargement initial
+  if (loadingInitial) {
     return (
         <div className="space-y-8">
             <Skeleton className="h-10 w-1/3" />
             <Skeleton className="h-32 w-full md:w-1/2" />
-            <Skeleton className="h-64 w-full" />
             <Skeleton className="h-64 w-full" />
         </div>
     );
@@ -175,31 +162,80 @@ export function RewardsPage() {
   return (
     <div className="space-y-12">
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
-          Mes Récompenses
-        </h1>
-        <p className="text-lg text-muted-foreground">
-          Suivez vos points et échangez-les contre des avantages exclusifs.
-        </p>
+        <h1 className="text-3xl font-bold tracking-tight md:text-4xl">Mes Récompenses</h1>
+        <p className="text-lg text-muted-foreground">Suivez vos points et échangez-les contre des avantages exclusifs.</p>
       </div>
 
       <Card className="bg-primary text-primary-foreground">
         <CardHeader>
-          <CardTitle className="text-2xl flex items-center gap-4">
-             <Gift className="h-8 w-8" />
-             <span>Votre Solde Actuel</span>
-          </CardTitle>
-           <CardDescription className="text-primary-foreground/80 pt-1">
-            Niveau d'adhésion : <span className="font-bold capitalize">{userData?.membershipLevel}</span>
-          </CardDescription>
+            <CardTitle className="text-2xl flex items-center gap-4">
+                <Gift className="h-8 w-8" />
+                <span>Votre Solde Actuel</span>
+            </CardTitle>
         </CardHeader>
         <CardContent>
-            <p className="text-6xl font-bold">
-                {userData?.loyaltyPoints?.toLocaleString("fr-FR") ?? 0}
-            </p>
+            <p className="text-6xl font-bold">{userData?.loyaltyPoints?.toLocaleString("fr-FR") ?? 0}</p>
             <p className="text-primary-foreground/80 mt-1">points</p>
         </CardContent>
       </Card>
+
+      <div className="space-y-4">
+        <h2 className="text-2xl font-bold">Échanger mes points</h2>
+        {loadingRewards && (
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(3)].map((_, i) => (
+                    <Card key={i} className="flex flex-col">
+                        <CardHeader><Skeleton className="h-6 w-3/4" /></CardHeader>
+                        <CardContent className="flex-grow"><Skeleton className="h-4 w-full" /></CardContent>
+                        <CardFooter><Skeleton className="h-12 w-full" /></CardFooter>
+                    </Card>
+                ))}
+            </div>
+        )}
+
+        {errorRewards && (
+            <Card className="md:col-span-3 bg-destructive/10 border-destructive">
+                <CardContent className="p-6 text-center text-destructive flex flex-col items-center gap-2">
+                    <AlertTriangle />
+                    <p className="font-semibold">Erreur lors du chargement des récompenses</p>
+                    <p className="text-sm">{errorRewards.message}</p>
+                </CardContent>
+            </Card>
+        )}
+
+        {!loadingRewards && !errorRewards && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredRewards.length > 0 ? filteredRewards.map(reward => (
+                    <Card key={reward.id} className="flex flex-col">
+                        <CardHeader>
+                            <CardTitle>{reward.title}</CardTitle>
+                            <CardDescription className="pt-2">{reward.description}</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex-grow flex items-center gap-2 font-semibold text-accent text-lg">
+                           <Coins />
+                           {reward.pointsCost.toLocaleString("fr-FR")} points
+                        </CardContent>
+                        <CardFooter>
+                            <Button 
+                                className="w-full min-h-[48px]"
+                                disabled={!userData || userData.loyaltyPoints < reward.pointsCost || redeemingStates[reward.id]}
+                                onClick={() => handleExchange(reward.id, reward.title)}
+                            >
+                                {redeemingStates[reward.id] ? "Échange en cours..." : "Échanger"}
+                            </Button>
+                        </CardFooter>
+                    </Card>
+                )) : (
+                    <Card className="md:col-span-3">
+                        <CardContent className="p-10 text-center text-muted-foreground">
+                            <p>Aucune récompense n'est actuellement disponible.</p>
+                        </CardContent>
+                    </Card>
+                )}
+            </div>
+        )}
+      </div>
+
 
       <div className="space-y-4">
         <h2 className="text-2xl font-bold">Historique des transactions</h2>
@@ -218,7 +254,7 @@ export function RewardsPage() {
                   transactions.map((tx) => (
                     <TableRow key={tx.id}>
                       <TableCell className="font-medium">{tx.description}</TableCell>
-                      <TableCell>{tx.timestamp.toDate().toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric"})}</TableCell>
+                      <TableCell>{tx.timestamp.toDate().toLocaleDateString("fr-FR")}</TableCell>
                       <TableCell className="text-right">
                          <Badge variant={tx.points >= 0 ? "secondary" : "destructive"}>
                            {tx.points > 0 ? `+${tx.points}` : tx.points}
@@ -237,45 +273,6 @@ export function RewardsPage() {
             </Table>
           </CardContent>
         </Card>
-      </div>
-
-      <div className="space-y-4">
-        <h2 className="text-2xl font-bold">Échanger mes points</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredRewards.map(reward => (
-                <Card key={reward.id} className="flex flex-col">
-                    <CardHeader>
-                        <CardTitle>{reward.title}</CardTitle>
-                        <CardDescription className="pt-2">
-                            {reward.description}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex-grow flex items-center gap-2 font-semibold text-accent text-lg">
-                       <Coins />
-                       {reward.pointsCost.toLocaleString("fr-FR")} points
-                    </CardContent>
-                    <CardFooter className="flex flex-col items-start gap-4">
-                        {reward.requiredLevel === 'privilege' && (
-                          <Badge variant="outline" className="w-fit border-accent text-accent">Exclusivité Privilège</Badge>
-                        )}
-                         <Button 
-                            className="w-full min-h-[48px]"
-                            disabled={!userData || userData.loyaltyPoints < reward.pointsCost || redeemingStates[reward.id]}
-                            onClick={() => handleExchange(reward)}
-                         >
-                            {redeemingStates[reward.id] ? "Échange en cours..." : "Échanger"}
-                         </Button>
-                    </CardFooter>
-                </Card>
-            ))}
-             {filteredRewards.length === 0 && !loading && (
-                <Card className="md:col-span-3">
-                    <CardContent className="p-10 text-center text-muted-foreground">
-                        <p>Aucune récompense disponible pour votre niveau d'adhésion pour le moment.</p>
-                    </CardContent>
-                </Card>
-            )}
-        </div>
       </div>
     </div>
   );
