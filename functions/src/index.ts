@@ -423,7 +423,7 @@ export const createCommunityPost = onCall(async (request) => {
       throw new HttpsError("not-found", "Profil utilisateur introuvable.");
     }
 
-    const authorName = userDoc.data()?.displayName || "Membre Anonyme";
+    const authorName = userDoc.data()?.nickname || "Membre Anonyme";
 
     // 5. Préparer et créer le nouveau document de post
     const newPost = {
@@ -513,17 +513,24 @@ export const addCommentToPost = onCall(async (request) => {
   }
 
   const authorId = request.auth.uid;
-  const authorName = request.auth.token.name || "Membre Anonyme";
   const authorAvatar = request.auth.token.picture || null;
 
-  logger.info(`L'utilisateur ${authorId} (${authorName}) ajoute un commentaire au post ${postId}.`);
+  logger.info(`L'utilisateur ${authorId} ajoute un commentaire au post ${postId}.`);
 
   try {
     const postRef = db.collection("community_posts").doc(postId);
     const commentsCollectionRef = postRef.collection("comments");
+    const userRef = db.collection("users").doc(authorId);
 
     // 3. Utiliser une transaction pour garantir l'atomicité
     await db.runTransaction(async (transaction) => {
+      // Étape cruciale : lire le profil de l'utilisateur pour obtenir son surnom
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists) {
+        throw new HttpsError("not-found", "Profil utilisateur introuvable pour récupérer le surnom.");
+      }
+      const authorName = userDoc.data()?.nickname || "Membre Anonyme";
+
       // Optionnel mais recommandé : vérifier que le post existe avant de commenter
       const postDoc = await transaction.get(postRef);
       if (!postDoc.exists) {
