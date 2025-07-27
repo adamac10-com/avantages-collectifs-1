@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -68,30 +67,39 @@ export function AuthForm() {
   });
 
   const onSubmit = async (values: z.infer<typeof authSchema>) => {
-    // a. Début : Active l'état de chargement
+    // Affiche un état de chargement pour désactiver le formulaire et informer l'utilisateur.
     setIsLoading(true);
     const auth = getAuth(firebaseApp);
     const functions = getFunctions(firebaseApp);
 
     try {
+      // Gérer le cas de l'inscription
       if (isSignUp) {
-        // Validation des champs pour l'inscription
+        // 1. Validation des champs : S'assurer que les informations requises sont présentes.
         if (!values.firstName || !values.lastName || !values.nickname) {
-          toast({ title: "Erreur", description: "Tous les champs sont requis pour l'inscription.", variant: "destructive" });
-          setIsLoading(false);
-          return;
+          toast({ 
+            title: "Champs manquants", 
+            description: "Le nom, le prénom et le surnom sont tous obligatoires.", 
+            variant: "destructive" 
+          });
+          setIsLoading(false); // Arrêter le chargement
+          return; // Stopper l'exécution
         }
 
-        // b. Étape 1 - Création Auth
+        // --- Début de la séquence d'opérations critiques ---
+
+        // 2a. Création du compte utilisateur dans Firebase Authentication
         const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
         const user = userCredential.user;
 
-        // c. Étape 2 - Mise à jour du Profil Auth : Étape cruciale pour la disponibilité du `displayName`
+        // 2b. Mise à jour du profil Firebase Auth avec le surnom (displayName)
+        // Cette étape est essentielle pour que le surnom soit immédiatement disponible
+        // dans le token d'identification de l'utilisateur (idToken).
         await updateProfile(user, {
           displayName: values.nickname,
         });
 
-        // d. Étape 3 - Finalisation du Profil Firestore
+        // 2c. Appel de la Cloud Function pour créer le document utilisateur dans Firestore
         const finalizeRegistration = httpsCallable(functions, 'finalizeRegistration');
         await finalizeRegistration({
           firstName: values.firstName,
@@ -99,53 +107,58 @@ export function AuthForm() {
           nickname: values.nickname,
         });
 
-        // e. Étape 4 - Feedback et Redirection
+        // --- Fin de la séquence ---
+
+        // Forcer le rafraîchissement du token pour récupérer les "custom claims" (ex: rôle)
+        // qui auraient pu être définis par la Cloud Function.
+        await user.getIdToken(true); 
+
         toast({
           title: "Inscription réussie !",
-          description: "Bienvenue ! Vous allez être redirigé.",
+          description: "Bienvenue ! Vous allez être redirigé vers votre espace.",
         });
-
-        await user.getIdToken(true); // Forcer le rafraîchissement du token pour les claims
+        
+        // Rediriger l'utilisateur vers la page principale après une inscription réussie.
         router.push("/");
         router.refresh();
 
       } else {
-        // Logique de connexion
+        // Gérer le cas de la connexion (inchangé)
         const persistenceType = rememberMe ? browserLocalPersistence : browserSessionPersistence;
         await setPersistence(auth, persistenceType);
         await signInWithEmailAndPassword(auth, values.email, values.password);
+        
         toast({
           title: "Connexion réussie !",
-          description: "Ravi de vous revoir. Vous allez être redirigé.",
+          description: "Ravi de vous revoir.",
         });
         router.push("/");
         router.refresh();
       }
     } catch (error: any) {
-      // Gestion des erreurs
+      // Gestion centralisée des erreurs (pour Auth et Cloud Functions)
       const errorCode = error.code;
-      let errorMessage = "Une erreur est survenue.";
+      let errorMessage = "Une erreur inattendue est survenue.";
 
       if (errorCode === "auth/email-already-in-use") {
         errorMessage = "Cette adresse e-mail est déjà utilisée.";
       } else if (errorCode === "auth/wrong-password" || errorCode === "auth/user-not-found" || errorCode === "auth/invalid-credential") {
-        errorMessage = "E-mail ou mot de passe incorrect.";
-      } else if (errorCode === "auth/invalid-email") {
-        errorMessage = "L'adresse e-mail n'est pas valide.";
+        errorMessage = "L'adresse e-mail ou le mot de passe est incorrect.";
       } else if (errorCode === "auth/weak-password") {
-        errorMessage = "Le mot de passe est trop faible (6 caractères minimum).";
+        errorMessage = "Le mot de passe doit contenir au moins 6 caractères.";
+      // Capture les erreurs spécifiques renvoyées par la Cloud Function.
       } else if (error.details?.message) {
-        errorMessage = error.details.message; // Erreur de la Cloud Function
+        errorMessage = error.details.message; 
       }
       
-      console.error("Authentication error:", error);
+      console.error("Erreur d'authentification ou d'inscription:", error);
       toast({
-        title: "Erreur",
+        title: "Échec de l'opération",
         description: errorMessage,
         variant: "destructive",
       });
     } finally {
-      // Désactivation de l'état de chargement
+      // Quoi qu'il arrive (succès ou échec), désactiver l'état de chargement.
       setIsLoading(false);
     }
   };
