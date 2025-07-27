@@ -27,13 +27,13 @@ export const finalizeRegistration = onCall(async (request) => {
   }
 
   // 2. Valider les données d'entrée
-  const { firstName, lastName, nickname } = request.data;
+  const {firstName, lastName, nickname} = request.data;
   if (!firstName || !lastName || !nickname) {
     throw new HttpsError("invalid-argument", "Les informations 'firstName', 'lastName' et 'nickname' sont requises.");
   }
 
   const user = request.auth;
-  const { uid, email } = user;
+  const {uid, email} = user;
 
   logger.info(`[finalizeRegistration] - Début de la finalisation du profil pour l'UID : ${uid}`);
 
@@ -42,8 +42,8 @@ export const finalizeRegistration = onCall(async (request) => {
     email: email || "",
     firstName,
     lastName,
-    nickname, // Ce champ est aussi le `displayName` dans Auth
-    displayName: nickname, // Maintenir la cohérence
+    nickname,
+    displayName: nickname, // Utiliser le surnom comme nom d'affichage
     photoURL: user.token.picture || null,
     membershipLevel: "essentiel",
     loyaltyPoints: 0,
@@ -54,11 +54,11 @@ export const finalizeRegistration = onCall(async (request) => {
   try {
     await db.collection("users").doc(uid).set(newUserProfile);
     logger.info(`[finalizeRegistration] - Profil créé avec succès dans Firestore pour l'UID : ${uid}`);
-    
+
     // Mettre à jour les custom claims de l'utilisateur pour inclure le rôle
-    await admin.auth().setCustomUserClaims(uid, { role: 'member' });
-    
-    return { success: true, message: "Profil utilisateur créé avec succès." };
+    await admin.auth().setCustomUserClaims(uid, {role: "member"});
+
+    return {success: true, message: "Profil utilisateur créé avec succès."};
   } catch (error) {
     logger.error(`[finalizeRegistration] - Erreur lors de la création du profil pour l'UID ${uid}:`, error);
     throw new HttpsError(
@@ -77,12 +77,6 @@ export const completeServiceRequest = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "La fonction doit être appelée par un utilisateur authentifié.");
   }
-
-  // Pour une sécurité accrue, on vérifierait le rôle du concierge ici aussi.
-  // const callerClaims = request.auth.token;
-  // if (callerClaims.role !== 'concierge') {
-  //     throw new HttpsError('permission-denied', 'Seul un concierge peut valider une demande.');
-  // }
 
   const {requestId} = request.data;
   if (!requestId || typeof requestId !== "string") {

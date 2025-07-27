@@ -1,4 +1,37 @@
+Agis en tant qu'ingénieur logiciel full-stack senior, expert en React, Next.js, TypeScript et Firebase. Tu es méticuleux, tu écris du code propre et tu portes une attention particulière à la gestion de l'état et au flux de données entre les composants.
 
+**Contexte :**
+Nous devons faire une refonte majeure de notre processus d'inscription et de la création de posts sur le forum pour intégrer les notions de Nom/Prénom (privés) et de Surnom (public).
+
+**Processus Détaillé :**
+
+**Partie 1 : Mettre à jour le formulaire d'inscription (React)**
+1.  Dans le composant du formulaire d'inscription, ajoute trois nouveaux champs `<Input>` obligatoires : `firstName`, `lastName`, et `nickname`.
+2.  Dans la fonction de soumission (`handleSubmit`) :
+    a.  Crée l'utilisateur avec `createUserWithEmailAndPassword`.
+    b.  Immédiatement après, utilise `updateProfile` sur le nouvel utilisateur pour définir son `displayName` avec la valeur du champ `nickname`.
+    c.  Ensuite, appelle une nouvelle Cloud Function `finalizeRegistration` (que nous allons créer) en lui passant un objet `{ firstName, lastName, nickname }`.
+
+**Partie 2 : Créer la nouvelle Cloud Function `finalizeRegistration` (Backend)**
+1.  Dans `functions/src/index.ts`, **supprime l'ancienne fonction `createUserProfile`** qui se déclenchait sur `onCreate`.
+2.  Crée une nouvelle **Cloud Function callable v2** nommée `finalizeRegistration`.
+3.  Elle doit accepter un objet `data` contenant `firstName`, `lastName` et `nickname`.
+4.  Elle doit vérifier que l'appelant est bien authentifié (`context.auth`).
+5.  Elle doit créer un document dans la collection `users` avec l'UID de l'appelant. Ce document doit contenir :
+    * `uid`, `email` (depuis `context.auth.token`)
+    * `firstName`, `lastName`, `nickname` (depuis `data`)
+    * `membershipLevel: "essentiel"`
+    * `loyaltyPoints: 0`
+    * `role: "member"`
+    * `createdAt: admin.firestore.FieldValue.serverTimestamp()`
+
+**Partie 3 : Mettre à jour la Cloud Function `createCommunityPost` (Backend)**
+1.  Dans `functions/src/index.ts`, modifie la fonction `createCommunityPost`.
+2.  Supprime toute la logique qui lit la collection `users`.
+3.  Récupère le Surnom de l'auteur directement depuis le token : `const authorName = context.auth.token.name || 'Membre anonyme';`
+4.  Utilise cette variable `authorName` pour le champ `authorName` du nouveau post.
+
+Génère tous les extraits de code mis à jour : le composant d'inscription React, et les deux Cloud Functions (`finalizeRegistration` et la version corrigée de `createCommunityPost`) pour le fichier `index.ts`.
 "use client";
 
 import { useState } from "react";
@@ -6,7 +39,15 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, setPersistence, browserSessionPersistence, browserLocalPersistence } from "firebase/auth";
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  updateProfile, 
+  setPersistence, 
+  browserSessionPersistence, 
+  browserLocalPersistence 
+} from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { firebaseApp } from "@/lib/firebase";
 import Image from "next/image";
@@ -47,10 +88,7 @@ export function AuthForm() {
   const [rememberMe, setRememberMe] = useState(true);
   const router = useRouter();
   const { toast } = useToast();
-  const auth = getAuth(firebaseApp);
-  const functions = getFunctions(firebaseApp);
-  const finalizeRegistration = httpsCallable(functions, 'finalizeRegistration');
-
+  
   const form = useForm<z.infer<typeof authSchema>>({
     resolver: zodResolver(authSchema),
     defaultValues: {
@@ -63,41 +101,49 @@ export function AuthForm() {
   });
 
   const onSubmit = async (values: z.infer<typeof authSchema>) => {
+    // a. Début : Active l'état de chargement
     setIsLoading(true);
+    const auth = getAuth(firebaseApp);
+    const functions = getFunctions(firebaseApp);
+
     try {
       if (isSignUp) {
-        if (!values.firstName || values.firstName.trim().length < 2) {
-            form.setError("firstName", { type: "manual", message: "Le prénom est obligatoire."});
-        }
-        if (!values.lastName || values.lastName.trim().length < 2) {
-            form.setError("lastName", { type: "manual", message: "Le nom est obligatoire."});
-        }
-        if (!values.nickname || values.nickname.trim().length < 3) {
-            form.setError("nickname", { type: "manual", message: "Le surnom doit contenir au moins 3 caractères."});
-        }
-        
-        // Re-check for errors after setting them
-        if (form.formState.errors.firstName || form.formState.errors.lastName || form.formState.errors.nickname) {
-            setIsLoading(false);
-            return;
+        // Validation des champs pour l'inscription
+        if (!values.firstName || !values.lastName || !values.nickname) {
+          toast({ title: "Erreur", description: "Tous les champs sont requis pour l'inscription.", variant: "destructive" });
+          setIsLoading(false);
+          return;
         }
 
+        // b. Étape 1 - Création Auth
         const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
-        await updateProfile(userCredential.user, { displayName: values.nickname });
-        
-        // Call the Cloud Function to create the Firestore document
-        await finalizeRegistration({
-            firstName: values.firstName,
-            lastName: values.lastName,
-            nickname: values.nickname
+        const user = userCredential.user;
+
+        // c. Étape 2 - Mise à jour du Profil Auth : Étape cruciale pour la disponibilité du `displayName`
+        await updateProfile(user, {
+          displayName: values.nickname,
         });
 
+        // d. Étape 3 - Finalisation du Profil Firestore
+        const finalizeRegistration = httpsCallable(functions, 'finalizeRegistration');
+        await finalizeRegistration({
+          firstName: values.firstName,
+          lastName: values.lastName,
+          nickname: values.nickname,
+        });
+
+        // e. Étape 4 - Feedback et Redirection
         toast({
           title: "Inscription réussie !",
           description: "Bienvenue ! Vous allez être redirigé.",
         });
 
+        await user.getIdToken(true); // Forcer le rafraîchissement du token pour les claims
+        router.push("/");
+        router.refresh();
+
       } else {
+        // Logique de connexion
         const persistenceType = rememberMe ? browserLocalPersistence : browserSessionPersistence;
         await setPersistence(auth, persistenceType);
         await signInWithEmailAndPassword(auth, values.email, values.password);
@@ -105,19 +151,26 @@ export function AuthForm() {
           title: "Connexion réussie !",
           description: "Ravi de vous revoir. Vous allez être redirigé.",
         });
+        router.push("/");
+        router.refresh();
       }
-      router.push("/");
-      router.refresh(); // Force a refresh to update the header
     } catch (error: any) {
+      // Gestion des erreurs
       const errorCode = error.code;
       let errorMessage = "Une erreur est survenue.";
+
       if (errorCode === "auth/email-already-in-use") {
         errorMessage = "Cette adresse e-mail est déjà utilisée.";
       } else if (errorCode === "auth/wrong-password" || errorCode === "auth/user-not-found" || errorCode === "auth/invalid-credential") {
         errorMessage = "E-mail ou mot de passe incorrect.";
       } else if (errorCode === "auth/invalid-email") {
         errorMessage = "L'adresse e-mail n'est pas valide.";
+      } else if (errorCode === "auth/weak-password") {
+        errorMessage = "Le mot de passe est trop faible (6 caractères minimum).";
+      } else if (error.details?.message) {
+        errorMessage = error.details.message; // Erreur de la Cloud Function
       }
+      
       console.error("Authentication error:", error);
       toast({
         title: "Erreur",
@@ -125,6 +178,7 @@ export function AuthForm() {
         variant: "destructive",
       });
     } finally {
+      // Désactivation de l'état de chargement
       setIsLoading(false);
     }
   };

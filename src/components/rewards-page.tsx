@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { db, firebaseApp } from "@/lib/firebase";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where, orderBy, Timestamp, writeBatch } from "firebase/firestore";
 import { useCollectionData } from "react-firebase-hooks/firestore";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Gift, Coins, AlertTriangle } from "lucide-react";
+import { Gift, Coins, AlertTriangle, Database } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface UserData {
@@ -44,7 +44,7 @@ interface Transaction {
 interface Reward {
     id: string;
     title: string;
-    description: string;
+    description:string;
     pointsCost: number;
     requiredLevel: 'essentiel' | 'privilege';
 }
@@ -55,6 +55,7 @@ export function RewardsPage() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
+  const [isSeeding, setIsSeeding] = useState(false);
   const [redeemingStates, setRedeemingStates] = useState<{[key: string]: boolean}>({});
 
   const functions = getFunctions(firebaseApp);
@@ -126,18 +127,52 @@ export function RewardsPage() {
         setRedeemingStates(prev => ({ ...prev, [rewardId]: false }));
     }
   };
-  
-  const filteredRewards = useMemo(() => {
-    if (!userData || !rewards) {
-      return rewards || [];
+
+  const seedRewards = async () => {
+    setIsSeeding(true);
+    try {
+        const batch = writeBatch(db);
+        const rewardsCollection = collection(db, "rewards");
+
+        const reward1 = {
+            title: "Réduction de 10€ sur une prestation",
+            description: "Obtenez 10€ de réduction sur la prestation de votre choix auprès de nos partenaires.",
+            pointsCost: 500,
+            requiredLevel: 'essentiel'
+        };
+        const rewardRef1 = doc(rewardsCollection, "reduction_10e");
+        batch.set(rewardRef1, reward1);
+
+        const reward2 = {
+            title: "Accès à un événement exclusif",
+            description: "Participez à un événement privé réservé aux membres Privilège (dégustation, avant-première...).",
+            pointsCost: 2000,
+            requiredLevel: 'privilege'
+        };
+        const rewardRef2 = doc(rewardsCollection, "event_privilege");
+        batch.set(rewardRef2, reward2);
+
+        await batch.commit();
+
+        toast({
+            title: "Données de test ajoutées",
+            description: "Deux récompenses de test ont été ajoutées à Firestore."
+        });
+
+    } catch (error) {
+        console.error("Erreur lors de l'ajout des données de test:", error);
+        toast({
+            title: "Erreur",
+            description: "Impossible d'ajouter les données de test.",
+            variant: "destructive"
+        });
+    } finally {
+        setIsSeeding(false);
     }
-    return rewards.filter(reward => {
-      if (userData.membershipLevel === 'privilege') {
-        return true; 
-      }
-      return reward.requiredLevel === 'essentiel';
-    });
-  }, [userData, rewards]);
+  };
+  
+  // No more filtering, we display all rewards.
+  const displayedRewards = rewards || [];
 
   if (loadingInitial) {
     return (
@@ -179,7 +214,16 @@ export function RewardsPage() {
       </Card>
 
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold">Échanger mes points</h2>
+        <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-bold">Échanger mes points</h2>
+             {/* --- Temporary Seeding Button --- */}
+             {rewards && rewards.length === 0 && (
+                <Button onClick={seedRewards} disabled={isSeeding} variant="outline" size="sm">
+                    <Database className="h-4 w-4 mr-2" />
+                    {isSeeding ? "Ajout en cours..." : "Ajouter des récompenses de test"}
+                </Button>
+             )}
+        </div>
         {loadingRewards && (
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(3)].map((_, i) => (
@@ -204,19 +248,20 @@ export function RewardsPage() {
 
         {!loadingRewards && !errorRewards && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredRewards.length > 0 ? filteredRewards.map(reward => (
+                {displayedRewards.length > 0 ? displayedRewards.map(reward => (
                     <Card key={reward.id} className="flex flex-col">
                         <CardHeader>
                             <CardTitle>{reward.title}</CardTitle>
                             <CardDescription className="pt-2">{reward.description}</CardDescription>
                         </CardHeader>
-                        <CardContent className="flex-grow flex items-center gap-2 font-semibold text-accent text-lg">
+                        <CardContent className="flex-grow flex items-center gap-2 font-semibold text-primary text-lg">
                            <Coins />
                            {reward.pointsCost.toLocaleString("fr-FR")} points
                         </CardContent>
                         <CardFooter>
                             <Button 
-                                className="w-full min-h-[48px]"
+                                className="w-full"
+                                style={{ minHeight: "48px" }}
                                 disabled={!userData || userData.loyaltyPoints < reward.pointsCost || redeemingStates[reward.id]}
                                 onClick={() => handleExchange(reward.id, reward.title)}
                             >
