@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { db, firebaseApp } from "@/lib/firebase";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { doc, onSnapshot, collection, query, orderBy, Timestamp } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { useCollectionData } from "react-firebase-hooks/firestore";
 import { Button } from "@/components/ui/button";
 import {
@@ -126,7 +126,7 @@ export function RewardsPage() {
     return rewards.filter(
       (reward) =>
         reward.requiredLevel === "essentiel" ||
-        (userData && reward.requiredLevel === userData.membershipLevel)
+        reward.requiredLevel === userData.membershipLevel
     );
   }, [userData, rewards]);
 
@@ -274,5 +274,3 @@ export function RewardsPage() {
     </div>
   );
 }
-
-    
