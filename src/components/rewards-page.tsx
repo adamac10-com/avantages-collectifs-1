@@ -275,3 +275,5 @@ export function RewardsPage() {
     </div>
   );
 }
+
+    
