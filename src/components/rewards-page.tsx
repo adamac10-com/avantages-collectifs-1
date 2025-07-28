@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { db, firebaseApp } from "@/lib/firebase";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, orderBy, Timestamp, where } from "firebase/firestore";
 import { useCollectionData } from "react-firebase-hooks/firestore";
 import { Button } from "@/components/ui/button";
 import {
@@ -100,6 +100,7 @@ export function RewardsPage() {
   }, [user]);
 
   const handleExchange = async (reward: Reward) => {
+    if (!user) return;
     setRedeemingStates(prev => ({ ...prev, [reward.id]: true }));
     try {
         await redeemReward({ rewardId: reward.id });
@@ -118,7 +119,7 @@ export function RewardsPage() {
         setRedeemingStates(prev => ({ ...prev, [reward.id]: false }));
     }
   };
-
+  
   const displayedRewards = useMemo(() => {
     if (!userData || !rewards) {
       return [];
