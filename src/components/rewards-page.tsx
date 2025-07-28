@@ -121,9 +121,11 @@ export function RewardsPage() {
   };
   
   const displayedRewards = useMemo(() => {
+    // Attendre que les données de l'utilisateur ET les récompenses soient chargées.
     if (!userData || !rewards) {
       return [];
     }
+    // Afficher les récompenses 'essentiel' plus celles du niveau de l'utilisateur.
     return rewards.filter(
       (reward) =>
         reward.requiredLevel === "essentiel" ||
