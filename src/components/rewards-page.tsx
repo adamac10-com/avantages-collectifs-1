@@ -121,11 +121,9 @@ export function RewardsPage() {
   };
   
   const displayedRewards = useMemo(() => {
-    // Attendre que les données de l'utilisateur ET les récompenses soient chargées.
     if (!userData || !rewards) {
       return [];
     }
-    // Afficher les récompenses 'essentiel' plus celles du niveau de l'utilisateur.
     return rewards.filter(
       (reward) =>
         reward.requiredLevel === "essentiel" ||
@@ -229,7 +227,7 @@ export function RewardsPage() {
                 )) : (
                     <Card className="md:col-span-3">
                         <CardContent className="p-10 text-center text-muted-foreground">
-                            <p>Aucune récompense n'est actuellement disponible.</p>
+                          Aucune récompense n'est actuellement disponible.
                         </CardContent>
                     </Card>
                 )}
