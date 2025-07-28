@@ -120,15 +120,13 @@ export function RewardsPage() {
   };
 
   const displayedRewards = useMemo(() => {
-    if (!userData) {
-      return rewards || [];
+    if (!userData || !rewards) {
+      return [];
     }
-    return (
-      rewards?.filter(
-        (reward) =>
-          reward.requiredLevel === "essentiel" ||
-          reward.requiredLevel === userData.membershipLevel
-      ) || []
+    return rewards.filter(
+      (reward) =>
+        reward.requiredLevel === "essentiel" ||
+        reward.requiredLevel === userData.membershipLevel
     );
   }, [userData, rewards]);
 
