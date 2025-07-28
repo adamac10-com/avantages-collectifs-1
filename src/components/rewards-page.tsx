@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { db, firebaseApp } from "@/lib/firebase";
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { doc, onSnapshot, collection, query, orderBy, Timestamp, where } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where, orderBy, Timestamp } from "firebase/firestore";
 import { useCollectionData } from "react-firebase-hooks/firestore";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Gift, Coins, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+// Définition des types pour une meilleure robustesse
 interface UserData {
   loyaltyPoints: number;
   membershipLevel: 'essentiel' | 'privilege';
@@ -42,7 +43,7 @@ interface Transaction {
 }
 
 interface Reward {
-    id: string;
+    id: string; // idField de Firestore
     title: string;
     description:string;
     pointsCost: number;
@@ -54,7 +55,7 @@ export function RewardsPage() {
   const { toast } = useToast();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loadingInitial, setLoadingInitial] = useState(true);
+  const [loadingUser, setLoadingUser] = useState(true);
   const [redeemingStates, setRedeemingStates] = useState<{[key: string]: boolean}>({});
 
   const functions = getFunctions(firebaseApp);
@@ -67,11 +68,11 @@ export function RewardsPage() {
 
   useEffect(() => {
     if (!user) {
-        setLoadingInitial(false);
+        setLoadingUser(false);
         return;
     }
 
-    setLoadingInitial(true);
+    setLoadingUser(true);
 
     const userDocRef = doc(db, "users", user.uid);
     const userUnsubscribe = onSnapshot(userDocRef, (doc) => {
@@ -82,7 +83,7 @@ export function RewardsPage() {
             membershipLevel: data.membershipLevel || 'essentiel'
         });
       }
-      setLoadingInitial(false);
+      setLoadingUser(false);
     });
 
     const transactionsQuery = query(collection(db, "transactions"), where("userId", "==", user.uid), orderBy("timestamp", "desc"));
@@ -99,8 +100,20 @@ export function RewardsPage() {
     };
   }, [user]);
 
+  const displayedRewards = useMemo(() => {
+    if (!rewards || !userData) {
+      return [];
+    }
+    return rewards.filter(reward => {
+      if (reward.requiredLevel === 'essentiel') {
+        return true;
+      }
+      return reward.requiredLevel === userData.membershipLevel;
+    });
+  }, [rewards, userData]);
+
+
   const handleExchange = async (reward: Reward) => {
-    if (!user) return;
     setRedeemingStates(prev => ({ ...prev, [reward.id]: true }));
     try {
         await redeemReward({ rewardId: reward.id });
@@ -120,20 +133,9 @@ export function RewardsPage() {
     }
   };
   
-  const displayedRewards = useMemo(() => {
-    if (!userData || !rewards) {
-      return [];
-    }
-    return rewards.filter(
-      (reward) =>
-        reward.requiredLevel === "essentiel" ||
-        reward.requiredLevel === userData.membershipLevel
-    );
-  }, [userData, rewards]);
-
-  if (loadingInitial) {
+  if (loadingUser) {
     return (
-        <div className="space-y-8 p-4 md:p-8">
+        <div className="space-y-8">
             <Skeleton className="h-10 w-1/3" />
             <Skeleton className="h-32 w-full md:w-1/2" />
             <Skeleton className="h-64 w-full" />
@@ -143,15 +145,13 @@ export function RewardsPage() {
 
   if (!user) {
     return (
-      <div className="container mx-auto py-8">
-        <Card className="text-center p-8">
-            <CardTitle>Accès non autorisé</CardTitle>
-            <CardDescription className="mt-2">Veuillez vous connecter pour accéder à vos récompenses.</CardDescription>
-        </Card>
-      </div>
+      <Card className="text-center p-8">
+        <CardTitle>Accès non autorisé</CardTitle>
+        <CardDescription className="mt-2">Veuillez vous connecter pour accéder à vos récompenses.</CardDescription>
+      </Card>
     );
   }
-  
+
   return (
     <div className="space-y-12">
       <div className="space-y-2">
@@ -162,14 +162,18 @@ export function RewardsPage() {
       <Card className="bg-primary text-primary-foreground">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-lg font-medium">Votre Solde</CardTitle>
-            <Gift className="h-6 w-6 text-accent" />
+            <Gift className="h-6 w-6 text-primary-foreground/80" />
         </CardHeader>
         <CardContent>
-            <div className="text-4xl font-bold">
-            {(userData?.loyaltyPoints ?? 0).toLocaleString("fr-FR")}
-            </div>
+            {userData ? (
+                <div className="text-5xl font-bold">
+                    {userData.loyaltyPoints.toLocaleString("fr-FR")} points
+                </div>
+            ) : (
+                <Skeleton className="h-12 w-48 bg-primary-foreground/20" />
+            )}
             <p className="pt-2 text-sm text-primary-foreground/80">
-                Points disponibles pour des récompenses exclusives.
+                Utilisez vos points pour débloquer des avantages uniques.
             </p>
         </CardContent>
       </Card>
@@ -180,25 +184,19 @@ export function RewardsPage() {
         </div>
         
         {loadingRewards && (
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <Skeleton className="h-56 w-full" />
-                <Skeleton className="h-56 w-full" />
-                <Skeleton className="h-56 w-full" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                 {Array.from({ length: 3 }).map((_, i) => (
+                    <Card key={i}><CardHeader><Skeleton className="h-6 w-3/4" /><Skeleton className="h-4 w-1/2 mt-2" /></CardHeader><CardContent><Skeleton className="h-8 w-1/3" /></CardContent><CardFooter><Skeleton className="h-12 w-full" /></CardFooter></Card>
+                 ))}
             </div>
         )}
 
         {errorRewards && (
-            <Card className="md:col-span-3 bg-destructive/10 border-destructive">
-                <CardHeader className="flex flex-row items-center gap-4">
-                    <AlertTriangle className="h-8 w-8 text-destructive" />
-                    <div>
-                        <CardTitle className="text-destructive">Erreur de chargement</CardTitle>
-                        <CardDescription className="text-destructive/80">
-                            Impossible de charger les récompenses disponibles. Veuillez réessayer plus tard.
-                        </CardDescription>
-                    </div>
-                </CardHeader>
-            </Card>
+            <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Erreur de chargement</AlertTitle>
+                <AlertDescription>Impossible de charger les récompenses pour le moment. Veuillez réessayer plus tard.</AlertDescription>
+            </Alert>
         )}
 
         {!loadingRewards && !errorRewards && (
@@ -227,7 +225,7 @@ export function RewardsPage() {
                 )) : (
                     <Card className="md:col-span-3">
                         <CardContent className="p-10 text-center text-muted-foreground">
-                          Aucune récompense n'est actuellement disponible.
+                            <p>Aucune récompense n'est actuellement disponible.</p>
                         </CardContent>
                     </Card>
                 )}
@@ -275,5 +273,3 @@ export function RewardsPage() {
     </div>
   );
 }
-
-    
