@@ -288,7 +288,7 @@ export function ThreadView({ threadId }: { threadId: string }) {
                   <Button
                     type="submit"
                     size="lg"
-                    style={{ minHeight: "48px" }}
+                    className="min-h-touch"
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? "Publication..." : "Publier ma réponse"}

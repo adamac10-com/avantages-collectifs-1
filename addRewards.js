@@ -1,6 +1,6 @@
 
 const { initializeApp } = require('firebase/app');
-const { getFirestore, collection, addDoc } = require('firebase/firestore');
+const { getFirestore, collection, doc, setDoc } = require('firebase/firestore');
 
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API_KEY,
@@ -16,12 +16,14 @@ const db = getFirestore(app);
 
 const rewards = [
   {
+    id: "cafe_procope", // ID explicite
     title: "Café gratuit chez Le Procope",
     description: "Un espresso offert par notre partenaire.",
     pointsCost: 50,
     requiredLevel: "essentiel",
   },
   {
+    id: "reduction_10_pourcent", // ID explicite
     title: "Réduction de 10% sur votre prochain achat",
     description: "Valable dans toutes les boutiques partenaires.",
     pointsCost: 100,
@@ -32,7 +34,8 @@ const rewards = [
 async function addRewards() {
   const rewardsCollection = collection(db, 'rewards');
   for (const reward of rewards) {
-    await addDoc(rewardsCollection, reward);
+    const rewardRef = doc(rewardsCollection, reward.id); // Utilise l'ID explicite
+    await setDoc(rewardRef, reward);
   }
 }
 

@@ -43,3 +43,24 @@ next-env.d.ts
 # firebase
 firebase-debug.log
 firestore-debug.log
+# Dépendances et modules locaux
+node_modules/
+bower_components/
+
+# Fichiers de configuration spécifiques à l'environnement local
+.env
+.env.local
+
+# Fichiers de débogage et logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Fichiers générés par l'émulateur Firebase
+.firebase/emulators/
+*.jar
+
+# Fichiers de cache et de système
+.DS_Store
+Thumbs.db
